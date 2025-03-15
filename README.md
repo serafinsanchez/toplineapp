@@ -31,7 +31,7 @@ Topline is a web application that allows users to extract stems from audio files
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/yourusername/toplineapp.git
+git clone https://github.com/serafinsanchez/toplineapp.git
 cd toplineapp
 ```
 
@@ -78,4 +78,4 @@ The database schema is defined in the `supabase/migrations` directory. The initi
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is private and proprietary.
