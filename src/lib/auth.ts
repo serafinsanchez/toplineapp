@@ -10,7 +10,7 @@
 
 import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import { supabase } from './supabase';
+import { supabase, createServiceRoleClient } from './supabase';
 
 /**
  * NextAuth.js configuration options
@@ -57,11 +57,65 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        // Get user's name from metadata
+        const fullName = data.user.user_metadata?.full_name || 
+                         data.user.user_metadata?.name || 
+                         data.user.email;
+
+        // Check if user profile exists, if not create it
+        const { data: profileData, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('user_id', data.user.id)
+          .single();
+
+        if (profileError && profileError.code !== 'PGRST116') {
+          console.error('Error fetching user profile:', profileError);
+        }
+
+        // If profile doesn't exist, create it with default values
+        if (!profileData) {
+          const { error: insertError } = await supabase
+            .from('user_profiles')
+            .insert({
+              user_id: data.user.id,
+              role: 'user',
+              balance: 10, // Give new users 10 credits by default
+              name: fullName !== data.user.email ? fullName : null,
+            });
+
+          if (insertError) {
+            console.error('Error creating user profile:', insertError);
+          }
+        } 
+        // If profile exists but doesn't have a name or balance is null, update it
+        else if ((fullName && fullName !== data.user.email && !profileData.name) || 
+                profileData.balance === null) {
+          const updateData: any = {};
+          
+          if (fullName && fullName !== data.user.email && !profileData.name) {
+            updateData.name = fullName;
+          }
+          
+          if (profileData.balance === null) {
+            updateData.balance = 10; // Set to 10 credits if balance is null
+          }
+          
+          const { error: updateError } = await supabase
+            .from('user_profiles')
+            .update(updateData)
+            .eq('user_id', data.user.id);
+
+          if (updateError) {
+            console.error('Error updating user profile:', updateError);
+          }
+        }
+
         // Return the user object
         return {
           id: data.user.id,
           email: data.user.email || '',
-          name: data.user.user_metadata?.full_name || data.user.email,
+          name: fullName,
         };
       },
     }),
@@ -81,6 +135,7 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
         token.email = user.email;
+        token.name = user.name;
       }
       return token;
     },
@@ -96,6 +151,26 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (token) {
         session.user.id = token.id as string;
+        session.user.name = token.name as string;
+        
+        // If name is not in the token or is just the email, try to get it from the database
+        if (!session.user.name || session.user.name === session.user.email) {
+          try {
+            // Get from user_profiles
+            const supabaseAdmin = createServiceRoleClient();
+            const { data, error } = await supabaseAdmin
+              .from('user_profiles')
+              .select('name')
+              .eq('user_id', session.user.id)
+              .single();
+            
+            if (!error && data && data.name) {
+              session.user.name = data.name;
+            }
+          } catch (error) {
+            console.error('Error fetching user name:', error);
+          }
+        }
       }
       return session;
     },

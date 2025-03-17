@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     const contentType = request.headers.get('content-type') || '';
     if (!contentType.includes('multipart/form-data')) {
       return NextResponse.json(
-        { error: 'Request must be multipart/form-data' },
+        { error: 'Oops! We need your file in multipart/form-data format. Tech stuff, we know!' },
         { status: 400 }
       );
     }
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
 
     if (!file) {
       return NextResponse.json(
-        { error: 'No file provided' },
+        { error: 'Looks like you forgot to attach a file! We need some audio to work with.' },
         { status: 400 }
       );
     }
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     // Validate file size
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
-        { error: 'File size exceeds the limit (50MB)' },
+        { error: 'Whoa, that file is huge! We can only handle files up to 50MB. Mind trimming it down?' },
         { status: 400 }
       );
     }
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
 
     if (!isValidFormat) {
       return NextResponse.json(
-        { error: 'Unsupported file format. Please upload MP3, WAV, or AIFF files.' },
+        { error: 'That file type isn\'t in our toolbox! We only work with MP3, WAV, or AIFF files.' },
         { status: 400 }
       );
     }
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error uploading file:', error);
     return NextResponse.json(
-      { error: 'Failed to upload file' },
+      { error: 'Uh-oh! Something went wrong while uploading your track. Let\'s try that again!' },
       { status: 500 }
     );
   }

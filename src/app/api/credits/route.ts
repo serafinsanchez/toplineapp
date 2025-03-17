@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { handleCreditTransaction, getUserCredits } from '@/lib/supabase';
 
 // GET endpoint to retrieve user's current credit balance
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     
@@ -12,7 +12,16 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     
-    const userId = session.user.id;
+    // Get userId from query params or use the current user's ID
+    const { searchParams } = new URL(request.url);
+    const requestedUserId = searchParams.get('userId');
+    const userId = requestedUserId || session.user.id;
+    
+    // Only allow users to get their own credits
+    if (userId !== session.user.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    
     const credits = await getUserCredits(userId);
     
     return NextResponse.json({ credits });

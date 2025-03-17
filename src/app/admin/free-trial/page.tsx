@@ -38,7 +38,7 @@ export default function AdminFreeTrial() {
     e.preventDefault();
     
     if (!clientIp) {
-      setError('Client IP is required');
+      setError('Whoops! We need an IP address to work our magic here.');
       return;
     }
     
@@ -60,7 +60,7 @@ export default function AdminFreeTrial() {
       setMessage(data.message || 'Free trial reset successfully');
       setClientIp('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setError(err instanceof Error ? err.message : 'Houston, we have a problem! Something went sideways with that reset.');
     } finally {
       setIsLoading(false);
     }

@@ -1,0 +1,109 @@
+"use client";
+
+import { useSession, signOut } from "next-auth/react";
+import { useState, useEffect } from "react";
+import { NavBar } from "@/components/ui/tubelight-navbar";
+import { Home, Upload, LayoutDashboard, CreditCard, LogOut } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useRouter } from "next/navigation";
+
+export function Header() {
+  const { data: session } = useSession();
+  const [credits, setCredits] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    const fetchUserCredits = async () => {
+      if (session?.user?.id) {
+        setIsLoading(true);
+        
+        try {
+          // Get user credits from the API
+          const response = await fetch(`/api/credits?userId=${session.user.id}`);
+          if (response.ok) {
+            const data = await response.json();
+            setCredits(data.credits);
+          } else {
+            console.error("Error fetching credits from API");
+            setCredits(0);
+          }
+        } catch (error) {
+          console.error("Error fetching user credits:", error);
+          setCredits(0);
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    if (session?.user?.id) {
+      fetchUserCredits();
+    } else {
+      setIsLoading(false);
+    }
+  }, [session]);
+
+  const handleLogout = async () => {
+    await signOut({ redirect: false });
+    router.push("/");
+  };
+
+  if (!session) {
+    return null;
+  }
+
+  const navItems = [
+    {
+      name: "Home",
+      url: "/",
+      icon: Home,
+    },
+    {
+      name: "Upload",
+      url: "/upload",
+      icon: Upload,
+    },
+    {
+      name: "Dashboard",
+      url: "/dashboard",
+      icon: LayoutDashboard,
+    },
+    {
+      name: "Credits",
+      url: "/credits",
+      icon: CreditCard,
+    },
+  ];
+
+  return (
+    <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between w-full px-6 py-4">
+      <div className="flex-1"></div>
+      
+      <NavBar items={navItems} />
+      
+      <div className="flex-1 flex justify-end items-center gap-4">
+        <div className="bg-muted/30 px-4 py-2 rounded-full">
+          <span className="text-sm font-medium">
+            {isLoading ? '...' : `${credits} credits`}
+          </span>
+        </div>
+        
+        <div className="bg-muted/30 px-4 py-2 rounded-full">
+          <span className="text-sm font-medium">
+            {session.user.name || session.user.email}
+          </span>
+        </div>
+        
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={handleLogout}
+          className="rounded-full hover:bg-destructive/10 hover:text-destructive"
+        >
+          <LogOut size={18} />
+        </Button>
+      </div>
+    </div>
+  );
+} 

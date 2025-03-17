@@ -20,7 +20,7 @@ const unlinkAsync = promisify(fs.unlink);
 // Configuration
 const API_KEY = process.env.MOISES_DEVELOPER_APIKEY || '2038d552-4626-45f9-8ce7-11f04e3aad08';
 const API_BASE_URL = 'https://api.music.ai/api';
-const WORKFLOW = 'music-ai/get-acapella';
+const WORKFLOW = 'music-ai/stems-vocals-accompaniment';
 
 // Temporary directory for uploaded files
 const TEMP_DIR = path.join(process.cwd(), 'tmp');

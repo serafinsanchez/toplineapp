@@ -9,7 +9,7 @@ const protectedPaths = [
   '/credits',
 ];
 
-// Paths that should redirect to dashboard if authenticated
+// Paths that should redirect to upload page if authenticated
 const authPaths = [
   '/auth/signin',
   '/auth/signup',
@@ -41,9 +41,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
   
-  // If the path is an auth path and the user is authenticated, redirect to dashboard
+  // If the path is an auth path and the user is authenticated, redirect to upload page
   if (isAuthPath && token) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+    return NextResponse.redirect(new URL('/upload', request.url));
   }
   
   return NextResponse.next();

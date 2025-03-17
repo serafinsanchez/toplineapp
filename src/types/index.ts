@@ -39,11 +39,20 @@ export interface Transaction {
   created_at: string;
 }
 
+// File details for upload
+export interface FileDetails {
+  name: string;
+  size: number;
+  type: string;
+  path?: string;
+}
+
 // Audio file type
 export interface AudioFile {
   name: string;
   type: string;
   data: string; // base64 encoded
+  url?: string; // URL for the audio file
 }
 
 // Stem extraction result type

@@ -14,6 +14,8 @@ export interface Database {
           user_id: string
           role: string
           balance: number
+          name: string | null
+          email: string | null
           created_at: string
           updated_at: string
         }
@@ -21,6 +23,8 @@ export interface Database {
           user_id: string
           role?: string
           balance?: number
+          name?: string | null
+          email?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -28,6 +32,8 @@ export interface Database {
           user_id?: string
           role?: string
           balance?: number
+          name?: string | null
+          email?: string | null
           created_at?: string
           updated_at?: string
         }
