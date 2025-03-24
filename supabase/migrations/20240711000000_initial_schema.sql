@@ -22,7 +22,6 @@ CREATE TABLE IF NOT EXISTS public.transactions (
 -- Create index on transactions.user_id for faster queries
 CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON public.transactions(user_id);
 
--- Create RLS (Row Level Security) policies
 -- Enable RLS on tables
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
@@ -40,27 +39,27 @@ CREATE POLICY "Users can update their own profile"
     FOR UPDATE
     USING (auth.uid() = user_id);
 
--- Admins can view all profiles
+-- Admins can view all profiles - simplified policy
 CREATE POLICY "Admins can view all profiles"
     ON public.user_profiles
     FOR SELECT
     USING (
-        EXISTS (
-            SELECT 1 FROM public.user_profiles
-            WHERE user_id = auth.uid() AND role = 'admin'
-        )
+        (SELECT role FROM public.user_profiles WHERE user_id = auth.uid()) = 'admin'
     );
 
--- Admins can update all profiles
+-- Admins can update all profiles - simplified policy
 CREATE POLICY "Admins can update all profiles"
     ON public.user_profiles
     FOR UPDATE
     USING (
-        EXISTS (
-            SELECT 1 FROM public.user_profiles
-            WHERE user_id = auth.uid() AND role = 'admin'
-        )
+        (SELECT role FROM public.user_profiles WHERE user_id = auth.uid()) = 'admin'
     );
+
+-- Service role can do everything
+CREATE POLICY "Service role can do everything"
+    ON public.user_profiles
+    FOR ALL
+    USING (auth.jwt() ->> 'role' = 'service_role');
 
 -- Transactions policies
 -- Users can view their own transactions
@@ -69,16 +68,11 @@ CREATE POLICY "Users can view their own transactions"
     FOR SELECT
     USING (auth.uid() = user_id);
 
--- Admins can view all transactions
-CREATE POLICY "Admins can view all transactions"
+-- Service role can do everything with transactions
+CREATE POLICY "Service role can do everything with transactions"
     ON public.transactions
-    FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM public.user_profiles
-            WHERE user_id = auth.uid() AND role = 'admin'
-        )
-    );
+    FOR ALL
+    USING (auth.jwt() ->> 'role' = 'service_role');
 
 -- Create function to automatically create a user profile when a new user signs up
 CREATE OR REPLACE FUNCTION public.handle_new_user()

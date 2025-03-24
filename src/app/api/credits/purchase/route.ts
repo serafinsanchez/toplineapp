@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { handleCreditTransaction } from '@/lib/supabase';
-import Stripe from 'stripe';
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2023-10-16',
-});
+import { createCheckoutSession, CREDIT_PACKAGES } from '@/lib/stripe';
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,38 +12,39 @@ export async function POST(request: NextRequest) {
     }
     
     const userId = session.user.id;
-    const { amount, credits } = await request.json();
+    const { packageId } = await request.json();
     
-    if (!amount || !credits) {
-      return NextResponse.json({ error: 'Amount and credits are required' }, { status: 400 });
+    if (!packageId) {
+      return NextResponse.json({ error: 'Package ID is required' }, { status: 400 });
+    }
+    
+    // Validate the package ID
+    const creditPackage = CREDIT_PACKAGES.find(pkg => pkg.id === packageId);
+    if (!creditPackage) {
+      return NextResponse.json({ error: 'Invalid package ID' }, { status: 400 });
     }
     
     // Create a Stripe checkout session
-    const stripeSession = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      line_items: [
-        {
-          price_data: {
-            currency: 'usd',
-            product_data: {
-              name: `${credits} Credits`,
-              description: 'Credits for Topline stem extraction service',
-            },
-            unit_amount: amount * 100, // Convert to cents
-          },
-          quantity: 1,
-        },
-      ],
-      mode: 'payment',
-      success_url: `${process.env.NEXTAUTH_URL}/dashboard?success=true`,
-      cancel_url: `${process.env.NEXTAUTH_URL}/dashboard?canceled=true`,
-      metadata: {
+    try {
+      const stripeSession = await createCheckoutSession(
         userId,
-        credits,
-      },
-    });
-    
-    return NextResponse.json({ url: stripeSession.url });
+        packageId,
+        `${process.env.NEXTAUTH_URL}/credits`,
+        `${process.env.NEXTAUTH_URL}/credits?canceled=true`
+      );
+      
+      return NextResponse.json({ 
+        success: true,
+        url: stripeSession.url,
+        sessionId: stripeSession.id
+      });
+    } catch (stripeError) {
+      console.error('Stripe error:', stripeError);
+      return NextResponse.json({ 
+        error: 'Failed to create Stripe checkout session',
+        detail: stripeError instanceof Error ? stripeError.message : 'Unknown error'
+      }, { status: 500 });
+    }
   } catch (error) {
     console.error('Error creating checkout session:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

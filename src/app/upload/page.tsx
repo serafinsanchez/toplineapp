@@ -16,7 +16,7 @@ export default function UploadPage() {
         >
           <div className="text-center mb-8">
             <h1 className="text-4xl font-semibold tracking-tight mb-4">
-              Upload Your Audio
+              Upload Your Song
             </h1>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Upload your audio file to extract vocals and instrumentals. We'll process your file and provide you with high-quality stems.

@@ -65,13 +65,20 @@ export const getUserProfile = async (userId: string) => {
 // Helper function to get user transactions
 export const getUserTransactions = async (userId: string) => {
   try {
-    const { data, error } = await supabase
+    // Use the service role client to bypass RLS
+    const supabaseAdmin = createServiceRoleClient();
+    
+    const { data, error } = await supabaseAdmin
       .from('transactions')
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      console.error('Error fetching transactions:', error);
+      throw error;
+    }
+
     return { success: true, transactions: data };
   } catch (error) {
     console.error('Error getting user transactions:', error);

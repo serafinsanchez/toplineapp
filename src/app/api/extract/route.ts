@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
   try {
     // Get the request body
     const body = await request.json();
-    const { filePath, bypassToken } = body;
+    const { filePath, bypassToken, authenticated, sessionStatus, userId: clientSideUserId } = body;
 
     if (!filePath) {
       return NextResponse.json(
@@ -34,10 +34,23 @@ export async function POST(request: NextRequest) {
     // Get the user session
     const session = await getServerSession(authOptions);
     const userId = session?.user?.id || null;
+    
+    // Add debugging for session issues
+    console.log('Authentication Debug:', {
+      sessionFromServer: !!session,
+      userId,
+      clientSideAuthenticated: authenticated,
+      clientSideSessionStatus: sessionStatus,
+      clientSideUserId
+    });
+    
+    // Track files to clean up at the end
+    const filesToCleanup = [filePath];
 
     // If user is logged in, check if they have enough credits
     if (userId) {
       const credits = await getUserCredits(userId);
+      console.log(`User ${userId} has ${credits} credits`);
       
       if (credits < 1) {
         return NextResponse.json(
@@ -46,6 +59,15 @@ export async function POST(request: NextRequest) {
         );
       }
     } else {
+      // Not authenticated - check if server-side session and client-side state are inconsistent
+      if (authenticated === true && clientSideUserId) {
+        console.error('Session inconsistency detected! Client thinks user is authenticated but server does not.');
+        return NextResponse.json(
+          { error: 'Session authentication error. Please try signing out and back in.' },
+          { status: 401 }
+        );
+      }
+      
       // Check if bypass token is provided for testing
       const isTestingBypass = bypassToken === BYPASS_TOKEN;
       
@@ -71,6 +93,7 @@ export async function POST(request: NextRequest) {
 
     // Process the audio file
     const { acapellaPath, instrumentalPath } = await processAudioFile(filePath, userId);
+    filesToCleanup.push(acapellaPath, instrumentalPath);
 
     // Read the output files
     const acapellaBuffer = fs.readFileSync(acapellaPath);
@@ -92,7 +115,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Clean up temporary files
-    cleanupFiles([filePath, acapellaPath, instrumentalPath]);
+    cleanupFiles(filesToCleanup);
 
     return response;
   } catch (error: any) {

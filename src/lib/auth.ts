@@ -59,56 +59,64 @@ export const authOptions: NextAuthOptions = {
 
         // Get user's name from metadata
         const fullName = data.user.user_metadata?.full_name || 
-                         data.user.user_metadata?.name || 
-                         data.user.email;
+                        data.user.user_metadata?.name || 
+                        data.user.email;
 
-        // Check if user profile exists, if not create it
-        const { data: profileData, error: profileError } = await supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('user_id', data.user.id)
-          .single();
+        // Use admin client for profile operations
+        const supabaseAdmin = createServiceRoleClient();
 
-        if (profileError && profileError.code !== 'PGRST116') {
-          console.error('Error fetching user profile:', profileError);
-        }
-
-        // If profile doesn't exist, create it with default values
-        if (!profileData) {
-          const { error: insertError } = await supabase
+        try {
+          // Check if user profile exists
+          const { data: profileData, error: profileError } = await supabaseAdmin
             .from('user_profiles')
-            .insert({
-              user_id: data.user.id,
-              role: 'user',
-              balance: 10, // Give new users 10 credits by default
-              name: fullName !== data.user.email ? fullName : null,
-            });
+            .select('*')
+            .eq('user_id', data.user.id)
+            .single();
 
-          if (insertError) {
-            console.error('Error creating user profile:', insertError);
+          if (profileError && profileError.code !== 'PGRST116') {
+            console.error('Error fetching user profile:', profileError);
           }
-        } 
-        // If profile exists but doesn't have a name or balance is null, update it
-        else if ((fullName && fullName !== data.user.email && !profileData.name) || 
-                profileData.balance === null) {
-          const updateData: any = {};
-          
-          if (fullName && fullName !== data.user.email && !profileData.name) {
-            updateData.name = fullName;
-          }
-          
-          if (profileData.balance === null) {
-            updateData.balance = 10; // Set to 10 credits if balance is null
-          }
-          
-          const { error: updateError } = await supabase
-            .from('user_profiles')
-            .update(updateData)
-            .eq('user_id', data.user.id);
 
-          if (updateError) {
-            console.error('Error updating user profile:', updateError);
+          // If profile doesn't exist, create it with default values
+          if (!profileData) {
+            const { error: insertError } = await supabaseAdmin
+              .from('user_profiles')
+              .insert({
+                user_id: data.user.id,
+                role: 'user',
+                balance: 10, // Give new users 10 credits by default
+                name: fullName !== data.user.email ? fullName : null,
+                email: data.user.email,
+              });
+
+            if (insertError) {
+              console.error('Error creating user profile:', insertError);
+            }
+          } 
+          // If profile exists but doesn't have a name or balance is null, update it
+          else if ((fullName && fullName !== data.user.email && !profileData.name) || 
+                  profileData.balance === null) {
+            const updateData: any = {};
+            
+            if (fullName && fullName !== data.user.email && !profileData.name) {
+              updateData.name = fullName;
+            }
+            
+            if (profileData.balance === null) {
+              updateData.balance = 10; // Set to 10 credits if balance is null
+            }
+            
+            const { error: updateError } = await supabaseAdmin
+              .from('user_profiles')
+              .update(updateData)
+              .eq('user_id', data.user.id);
+
+            if (updateError) {
+              console.error('Error updating user profile:', updateError);
+            }
           }
+        } catch (error) {
+          console.error('Error managing user profile:', error);
         }
 
         // Return the user object
@@ -117,7 +125,7 @@ export const authOptions: NextAuthOptions = {
           email: data.user.email || '',
           name: fullName,
         };
-      },
+      }
     }),
   ],
   callbacks: {

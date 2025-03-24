@@ -80,6 +80,27 @@ export interface Database {
           }
         ]
       }
+      free_trial_usage: {
+        Row: {
+          id: string
+          client_ip: string
+          user_agent: string | null
+          used_at: string
+        }
+        Insert: {
+          id?: string
+          client_ip: string
+          user_agent?: string | null
+          used_at?: string
+        }
+        Update: {
+          id?: string
+          client_ip?: string
+          user_agent?: string | null
+          used_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -107,6 +128,7 @@ export interface Database {
 // Helper types for Supabase tables
 export type UserProfile = Database['public']['Tables']['user_profiles']['Row']
 export type Transaction = Database['public']['Tables']['transactions']['Row']
+export type FreeTrialUsage = Database['public']['Tables']['free_trial_usage']['Row']
 
 // Helper types for transaction types
 export type TransactionType = 'purchase' | 'use' 

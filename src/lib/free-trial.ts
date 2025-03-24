@@ -8,7 +8,7 @@ const FREE_TRIAL_COOKIE = 'topline_free_trial_used';
 export async function hasUsedFreeTrial(clientIp: string): Promise<boolean> {
   try {
     // Check if the free trial cookie exists
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const freeTrialCookie = cookieStore.get(FREE_TRIAL_COOKIE);
     
     if (freeTrialCookie) {
@@ -40,7 +40,7 @@ export async function hasUsedFreeTrial(clientIp: string): Promise<boolean> {
 export async function recordFreeTrial(clientIp: string, userAgent?: string): Promise<boolean> {
   try {
     // Set the free trial cookie
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     cookieStore.set(FREE_TRIAL_COOKIE, 'true', {
       maxAge: 60 * 60 * 24 * 365, // 1 year
       path: '/',

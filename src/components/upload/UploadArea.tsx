@@ -3,7 +3,7 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { useDropzone } from "react-dropzone";
 import { motion } from "framer-motion";
-import { Upload, CheckCircle, XCircle, Music, Trash2, Loader2 } from "lucide-react";
+import { Upload, CheckCircle, XCircle, Music, Trash2, Loader2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,7 @@ import axios from "axios";
 import { ExtractedStemsDisplay } from "./ExtractedStemsDisplay";
 import { SparklesCore } from "@/components/ui/sparkles";
 import { ProcessingStatus } from "./ProcessingStatus";
+import { useSession } from "next-auth/react";
 
 export function UploadArea() {
   const [fileDetails, setFileDetails] = useState<FileDetails | null>(null);
@@ -22,8 +23,11 @@ export function UploadArea() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingError, setProcessingError] = useState<string | null>(null);
   const [extractedStems, setExtractedStems] = useState<StemExtractionResult | null>(null);
+  const [freeTrialUsed, setFreeTrialUsed] = useState<boolean>(false);
   const dropzoneRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { data: session, status } = useSession();
+  const isAuthenticated = status === "authenticated";
 
   // Handle the "Get Stems" button click
   const handleGetStems = async () => {
@@ -37,7 +41,10 @@ export function UploadArea() {
       // Make API call to extract stems
       const response = await axios.post('/api/extract', {
         filePath: fileDetails.path,
-        bypassToken: 'topline-dev-testing-bypass' // Special token for testing
+        // Add debug info to help diagnose auth issues
+        authenticated: isAuthenticated,
+        sessionStatus: status,
+        userId: session?.user?.id || null
       });
       
       // Handle successful response
@@ -68,7 +75,24 @@ export function UploadArea() {
       }
     } catch (error: any) {
       console.error('Error extracting stems:', error);
-      setProcessingError(error.response?.data?.error || error.message || 'Failed to extract stems');
+      
+      // Handle error response
+      if (error.response) {
+        // Get error message from response
+        const errorMessage = error.response.data?.error || 'Failed to extract stems';
+        setProcessingError(errorMessage);
+        
+        // If it's a 403 error and we've already used the free trial, stop processing immediately
+        if (error.response.status === 403 && errorMessage.includes('already jammed with our free trial')) {
+          console.log('Free trial already used');
+        }
+      } else if (error.request) {
+        // The request was made but no response was received
+        setProcessingError('No response received from server. Please check your connection and try again.');
+      } else {
+        // Something happened in setting up the request
+        setProcessingError(error.message || 'Failed to extract stems');
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -118,6 +142,21 @@ export function UploadArea() {
             path: response.data.filePath
           });
           setIsValidFile(isValid);
+          
+          // Only check free trial for non-authenticated users
+          if (!isAuthenticated) {
+            // Check if free trial has been used
+            axios.get('/api/free-trial/check')
+              .then(freeTrialResponse => {
+                setFreeTrialUsed(freeTrialResponse.data.used === true);
+              })
+              .catch(error => {
+                console.error('Error checking free trial status:', error);
+              });
+          } else {
+            // For authenticated users, assume they can use their credits
+            setFreeTrialUsed(false);
+          }
         } else {
           setDropError(response.data.error || 'Failed to upload file');
           setIsValidFile(false);
@@ -295,8 +334,38 @@ export function UploadArea() {
     }
   };
 
+  // Update this function to properly handle the error message 
+  const renderErrorWithLink = (errorMessage: string) => {
+    // Check if the error message is the free trial message
+    if (errorMessage.includes('already jammed with our free trial')) {
+      return (
+        <p className="text-red-500">
+          Looks like you've already jammed with our free trial!{' '}
+          <button 
+            type="button"
+            className="text-blue-500 underline font-medium hover:text-blue-700 cursor-pointer"
+            onClick={() => {
+              window.location.href = "http://localhost:3000/auth/signup";
+            }}
+          >
+            Create an account
+          </button>{' '}
+          to unlock more access.
+        </p>
+      );
+    }
+    
+    // For other error messages, return as is
+    return <p className="text-red-500">{errorMessage}</p>;
+  };
+
+  // Handle signup navigation
+  const handleSignUp = () => {
+    window.location.href = "http://localhost:3000/auth/signup";
+  };
+
   return (
-    <div className="w-full max-w-3xl mx-auto p-6">
+    <div className="w-full max-w-4xl mx-auto p-6">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -314,7 +383,6 @@ export function UploadArea() {
             handleManualFileSelect(e);
           }}
           style={{ display: 'none' }}
-          disabled={!!extractedStems}
         />
         
         {/* Only show file details if stems are not extracted yet */}
@@ -326,7 +394,8 @@ export function UploadArea() {
             transition={{ duration: 0.3 }}
             className={cn(
               "w-full h-64 border-2 rounded-lg flex flex-col items-center justify-center p-6",
-              isValidFile === true ? "border-blue-400 bg-blue-50/5" : "",
+              isValidFile === true && !freeTrialUsed ? "border-blue-400 bg-blue-50/5" : "",
+              isValidFile === true && freeTrialUsed ? "border-blue-400 bg-blue-50/10" : "",
               isValidFile === false ? "border-red-500 bg-red-50/10" : "border-border"
             )}
           >
@@ -351,7 +420,7 @@ export function UploadArea() {
             <p className="text-sm text-muted-foreground">
               {formatFileSize(fileDetails.size)}
             </p>
-            {isValidFile && (
+            {isValidFile && !freeTrialUsed && (
               <motion.p 
                 initial={{ opacity: 0, y: 5 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -359,6 +428,16 @@ export function UploadArea() {
                 className="text-sm text-blue-300 mt-2 flex items-center gap-1"
               >
                 <CheckCircle className="w-4 h-4 text-blue-300" /> Ready for stem separation!
+              </motion.p>
+            )}
+            {isValidFile && freeTrialUsed && (
+              <motion.p 
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="text-sm text-blue-300 mt-2 flex items-center gap-1"
+              >
+                <CheckCircle className="w-4 h-4 text-blue-300" /> Valid file! Sign up to extract stems.
               </motion.p>
             )}
             {!isValidFile && (
@@ -472,6 +551,23 @@ export function UploadArea() {
           />
         )}
         
+        {/* Display free trial used message if applicable */}
+        {freeTrialUsed && !processingError && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.3 }}
+            className="w-full mt-4 p-4 border-2 border-blue-400 rounded-lg bg-blue-50/10"
+          >
+            <p className="text-center">
+              <span className="font-medium text-blue-400">Thanks for trying it out!</span>{' '}
+              <span className="text-muted-foreground">
+                Sign up to add extract more stems.
+              </span>
+            </p>
+          </motion.div>
+        )}
+        
         {/* Display processing error if any */}
         {processingError && (
           <motion.div
@@ -480,7 +576,7 @@ export function UploadArea() {
             transition={{ delay: 0.2, duration: 0.3 }}
             className="w-full mt-4 p-4 border-2 border-red-500 rounded-lg bg-red-50/10"
           >
-            <p className="text-red-500">{processingError}</p>
+            {renderErrorWithLink(processingError)}
           </motion.div>
         )}
 
@@ -516,24 +612,45 @@ export function UploadArea() {
           {!extractedStems ? (
             // Only show "Get Stems" button if there's a valid file and not currently processing
             fileDetails && isValidFile && !isProcessing ? (
-              <ShimmerButton 
-                onClick={handleGetStems}
-                className="font-medium relative"
-                background="rgba(25, 55, 125, 0.4)"
-                shimmerColor="rgba(138, 180, 248, 0.8)"
-              >
-                <span className="flex items-center gap-2">
-                  Get Stems <Music className="w-4 h-4" />
-                </span>
-                
-                {/* Additional glow effect on hover */}
-                <div className={cn(
-                  "absolute inset-0 -z-10 rounded-md transition-opacity duration-300",
-                  isHovering ? "opacity-100" : "opacity-0"
-                )}>
-                  <div className="absolute inset-0 bg-blue-500/20 blur-md rounded-md"></div>
-                </div>
-              </ShimmerButton>
+              freeTrialUsed ? (
+                <ShimmerButton 
+                  onClick={handleSignUp}
+                  className="font-medium relative"
+                  background="rgba(25, 55, 125, 0.4)"
+                  shimmerColor="rgba(138, 180, 248, 0.8)"
+                >
+                  <span className="flex items-center gap-2">
+                    Sign Up Now <ArrowRight className="w-4 h-4" />
+                  </span>
+                  
+                  {/* Additional glow effect on hover */}
+                  <div className={cn(
+                    "absolute inset-0 -z-10 rounded-md transition-opacity duration-300",
+                    isHovering ? "opacity-100" : "opacity-0"
+                  )}>
+                    <div className="absolute inset-0 bg-blue-500/20 blur-md rounded-md"></div>
+                  </div>
+                </ShimmerButton>
+              ) : (
+                <ShimmerButton 
+                  onClick={handleGetStems}
+                  className="font-medium relative"
+                  background="rgba(25, 55, 125, 0.4)"
+                  shimmerColor="rgba(138, 180, 248, 0.8)"
+                >
+                  <span className="flex items-center gap-2">
+                    Get Stems <Music className="w-4 h-4" />
+                  </span>
+                  
+                  {/* Additional glow effect on hover */}
+                  <div className={cn(
+                    "absolute inset-0 -z-10 rounded-md transition-opacity duration-300",
+                    isHovering ? "opacity-100" : "opacity-0"
+                  )}>
+                    <div className="absolute inset-0 bg-blue-500/20 blur-md rounded-md"></div>
+                  </div>
+                </ShimmerButton>
+              )
             ) : null
           ) : (
             // Show "Start Over" button if stems have been extracted
@@ -544,7 +661,7 @@ export function UploadArea() {
               shimmerColor="rgba(180, 185, 210, 0.5)"
             >
               <span className="flex items-center gap-2">
-                Start Over <Upload className="w-4 h-4" />
+                Upload New Song <Upload className="w-4 h-4" />
               </span>
             </ShimmerButton>
           )}

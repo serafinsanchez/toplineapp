@@ -1,17 +1,32 @@
 import Stripe from 'stripe';
 
-// Initialize Stripe with the secret key
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2023-10-16', // Use the latest API version
-});
-
 // Credit package options
 export const CREDIT_PACKAGES = [
-  { id: 'credits_5', name: '5 Credits', credits: 5, price: 500 }, // $5.00
-  { id: 'credits_10', name: '10 Credits', credits: 10, price: 900 }, // $9.00
-  { id: 'credits_25', name: '25 Credits', credits: 25, price: 2000 }, // $20.00
-  { id: 'credits_50', name: '50 Credits', credits: 50, price: 3500 }, // $35.00
+  { id: 'standard', name: 'Credits Package', credits: 10, price: 999 }, // $9.99
 ];
+
+// Server-side Stripe client
+// This should only be used in server components or API routes
+let stripeInstance: Stripe | null = null;
+
+export const getStripe = () => {
+  if (!stripeInstance && typeof process !== 'undefined' && process.env.STRIPE_SECRET_KEY) {
+    stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY, {
+      apiVersion: '2023-10-16', // Use the latest API version
+    });
+  }
+  return stripeInstance;
+};
+
+// Client-side Stripe checkout
+// This can be safely used in client components
+export const getStripeJs = async () => {
+  if (typeof window !== 'undefined') {
+    const { loadStripe } = await import('@stripe/stripe-js');
+    return loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+  }
+  return null;
+};
 
 // Create a Stripe checkout session for credit purchase
 export async function createCheckoutSession(
@@ -25,6 +40,11 @@ export async function createCheckoutSession(
   
   if (!creditPackage) {
     throw new Error('Invalid credit package');
+  }
+
+  const stripe = getStripe();
+  if (!stripe) {
+    throw new Error('Failed to initialize Stripe');
   }
 
   // Create a checkout session
@@ -59,6 +79,11 @@ export async function createCheckoutSession(
 // Verify and process a successful payment
 export async function handleSuccessfulPayment(sessionId: string) {
   try {
+    const stripe = getStripe();
+    if (!stripe) {
+      throw new Error('Failed to initialize Stripe');
+    }
+    
     // Retrieve the checkout session
     const session = await stripe.checkout.sessions.retrieve(sessionId, {
       expand: ['payment_intent'],
