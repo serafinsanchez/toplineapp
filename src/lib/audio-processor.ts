@@ -231,7 +231,7 @@ async function waitForJobCompletion(jobId: string): Promise<MusicAiJobResponse> 
 /**
  * Download the stems from a completed job
  */
-async function downloadStems(job: MusicAiJobResponse, outputDir: string): Promise<MusicAiStemResult> {
+export async function downloadStems(job: MusicAiJobResponse, outputDir: string): Promise<MusicAiStemResult> {
   console.log(`Downloading stems to ${outputDir}...`);
   
   // Extra defensive coding for production
