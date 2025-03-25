@@ -13,6 +13,7 @@ import { ExtractedStemsDisplay } from "./ExtractedStemsDisplay";
 import { SparklesCore } from "@/components/ui/sparkles";
 import { ProcessingStatus } from "./ProcessingStatus";
 import { useSession } from "next-auth/react";
+import { CREDIT_REFRESH_EVENT } from "@/components/layout/Header";
 
 export function UploadArea() {
   const [fileDetails, setFileDetails] = useState<FileDetails | null>(null);
@@ -136,12 +137,19 @@ export function UploadArea() {
             console.log('Processing completed successfully!');
             
             // Refresh credits in the header after successful extraction
-            if (window.refreshUserCredits && isAuthenticated) {
+            if (isAuthenticated && typeof window !== 'undefined') {
               try {
-                await window.refreshUserCredits();
-                console.log('Credits refreshed in header');
+                // Dispatch the credit refresh event with proper configuration
+                // Note: Some browsers need the event to be explicitly set as bubbling and cancelable
+                const creditRefreshEvent = new CustomEvent(CREDIT_REFRESH_EVENT, {
+                  bubbles: true,
+                  cancelable: true,
+                  detail: { timestamp: Date.now() }
+                });
+                window.dispatchEvent(creditRefreshEvent);
+                console.log('Credit refresh event dispatched');
               } catch (refreshError) {
-                console.error('Error refreshing credits:', refreshError);
+                console.error('Error dispatching credit refresh event:', refreshError);
               }
             }
           } else if (statusData.status === 'FAILED') {

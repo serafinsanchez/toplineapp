@@ -1,18 +1,14 @@
 "use client";
 
 import { useSession, signOut } from "next-auth/react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { NavBar } from "@/components/ui/tubelight-navbar";
 import { Home, Upload, LayoutDashboard, CreditCard, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 
-// Declare global refreshCredits function on window
-declare global {
-  interface Window {
-    refreshUserCredits: () => Promise<void>;
-  }
-}
+// Event name constant for credit refresh
+export const CREDIT_REFRESH_EVENT = 'refresh-user-credits';
 
 export function Header() {
   const { data: session } = useSession();
@@ -20,8 +16,8 @@ export function Header() {
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
-  // Function to fetch user credits from API
-  const fetchUserCredits = async () => {
+  // Function to fetch user credits from API (memoized to prevent unnecessary re-renders)
+  const fetchUserCredits = useCallback(async () => {
     if (session?.user?.id) {
       setIsLoading(true);
       
@@ -42,22 +38,30 @@ export function Header() {
         setIsLoading(false);
       }
     }
-  };
+  }, [session]);
 
-  // Make fetchUserCredits available globally
+  // Listen for credit refresh events
   useEffect(() => {
+    // Custom event listener for credit refreshes
+    const handleCreditRefresh = (event: Event) => {
+      console.log("Credit refresh event received", (event as CustomEvent)?.detail);
+      fetchUserCredits();
+    };
+    
+    // Add event listener
     if (typeof window !== 'undefined') {
-      window.refreshUserCredits = fetchUserCredits;
+      window.addEventListener(CREDIT_REFRESH_EVENT, handleCreditRefresh);
     }
     
     return () => {
       // Clean up when component unmounts
       if (typeof window !== 'undefined') {
-        delete window.refreshUserCredits;
+        window.removeEventListener(CREDIT_REFRESH_EVENT, handleCreditRefresh);
       }
     };
-  }, [session]);
+  }, [fetchUserCredits]);
 
+  // Initial fetch of user credits
   useEffect(() => {
     if (session?.user?.id) {
       fetchUserCredits();
