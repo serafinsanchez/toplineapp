@@ -4,16 +4,18 @@
   "installCommand": "npm install",
   "framework": "nextjs",
   "regions": ["iad1"],
-  "builds": [
-    {
-      "src": "package.json",
-      "use": "@vercel/next"
-    }
-  ],
   "functions": {
     "app/api/extract/route.ts": {
       "memory": 3008,
       "maxDuration": 300
+    },
+    "app/api/process-start/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    },
+    "app/api/process-status/route.ts": {
+      "memory": 1024,
+      "maxDuration": 60
     },
     "app/api/**/*.ts": {
       "memory": 1024,
