@@ -67,7 +67,7 @@ export async function saveUploadedFile(file: Buffer, filename: string): Promise<
 /**
  * Upload a file to the Music AI temporary storage
  */
-async function uploadFile(filePath: string): Promise<string> {
+export async function uploadFile(filePath: string): Promise<string> {
   console.log(`Uploading ${filePath}...`);
   
   try {
@@ -112,7 +112,7 @@ async function uploadFile(filePath: string): Promise<string> {
 /**
  * Create a new job to process the audio file
  */
-async function createJob(inputUrl: string): Promise<string> {
+export async function createJob(inputUrl: string): Promise<string> {
   console.log(`Creating job with workflow: ${WORKFLOW}...`);
   
   try {
@@ -143,7 +143,7 @@ async function createJob(inputUrl: string): Promise<string> {
 /**
  * Check the status of a job
  */
-async function checkJobStatus(jobId: string): Promise<MusicAiJobResponse> {
+export async function checkJobStatus(jobId: string): Promise<MusicAiJobResponse> {
   try {
     const response = await axios.get<MusicAiJobResponse>(`${API_BASE_URL}/job/${jobId}`, {
       headers: { 'Authorization': API_KEY }
@@ -348,7 +348,7 @@ async function downloadStems(job: MusicAiJobResponse, outputDir: string): Promis
 /**
  * Clean up a job after processing
  */
-async function cleanupJob(jobId: string): Promise<void> {
+export async function cleanupJob(jobId: string): Promise<void> {
   console.log(`Cleaning up job ${jobId}...`);
   
   try {
@@ -412,7 +412,7 @@ export async function processAudioFile(
 /**
  * Deduct a credit from the user's account
  */
-async function deductCredit(userId: string): Promise<void> {
+export async function deductCredit(userId: string): Promise<void> {
   try {
     // Use the service role client to bypass RLS
     const supabaseAdmin = createServiceRoleClient();

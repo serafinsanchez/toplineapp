@@ -38,89 +38,128 @@ export function UploadArea() {
       setProcessingError(null);
       setExtractedStems(null);
       
-      // Make API call to extract stems
-      const response = await axios.post('/api/extract', {
+      // Step 1: Start the processing job
+      console.log("Starting processing job...");
+      const startResponse = await axios.post('/api/process-start', {
         filePath: fileDetails.path,
-        // Add debug info to help diagnose auth issues
         authenticated: isAuthenticated,
         sessionStatus: status,
         userId: session?.user?.id || null
       }, {
-        // Add a longer timeout for the request
-        timeout: 180000 // 3 minutes
+        timeout: 30000 // 30 seconds is enough to start the job
       });
       
-      // Handle successful response
-      if (response?.data && response.data.success === true) {
+      if (!startResponse.data.success) {
+        throw new Error(startResponse.data.error || 'Failed to start processing');
+      }
+      
+      const processId = startResponse.data.processId;
+      console.log(`Processing started with ID: ${processId}`);
+      
+      // Step 2: Poll for job status
+      let completed = false;
+      let attempts = 0;
+      const maxAttempts = 40; // Poll for up to ~2 minutes (40 * 3 seconds)
+      
+      while (!completed && attempts < maxAttempts) {
+        attempts++;
+        
         try {
-          // Get file name without extension
-          const fileNameWithoutExt = fileDetails.name.substring(0, fileDetails.name.lastIndexOf('.')) || fileDetails.name;
+          // Wait 3 seconds between polls
+          await new Promise(resolve => setTimeout(resolve, 3000));
           
-          // Validate that response data contains the expected structure
-          const hasAcapellaData = response.data.acapella && 
-                                 typeof response.data.acapella === 'object' && 
-                                 typeof response.data.acapella.data === 'string';
-                                 
-          const hasInstrumentalData = response.data.instrumental && 
-                                     typeof response.data.instrumental === 'object' && 
-                                     typeof response.data.instrumental.data === 'string';
+          // Check the job status
+          const statusResponse = await axios.get(`/api/process-status?processId=${processId}`, {
+            timeout: 30000 // 30 seconds timeout for status check
+          });
           
-          if (!hasAcapellaData || !hasInstrumentalData) {
-            console.error('Invalid response structure:', {
-              hasAcapella: !!response.data.acapella,
-              acapellaType: typeof response.data.acapella,
-              hasAcapellaData: hasAcapellaData,
-              hasInstrumental: !!response.data.instrumental,
-              instrumentalType: typeof response.data.instrumental,
-              hasInstrumentalData: hasInstrumentalData
+          const statusData = statusResponse.data;
+          
+          if (statusData.status === 'COMPLETED') {
+            completed = true;
+            
+            // Process the completed job
+            // Get file name without extension
+            const fileNameWithoutExt = fileDetails.name.substring(0, fileDetails.name.lastIndexOf('.')) || fileDetails.name;
+            
+            // Validate that response data contains the expected structure
+            const hasAcapellaData = statusData.acapella && 
+                                  typeof statusData.acapella === 'object' && 
+                                  typeof statusData.acapella.data === 'string';
+                                  
+            const hasInstrumentalData = statusData.instrumental && 
+                                      typeof statusData.instrumental === 'object' && 
+                                      typeof statusData.instrumental.data === 'string';
+            
+            if (!hasAcapellaData || !hasInstrumentalData) {
+              console.error('Invalid response structure from status check');
+              throw new Error('Invalid response data');
+            }
+            
+            // Create explicit type values for safety
+            const acapellaType = typeof statusData.acapella.type === 'string' 
+              ? statusData.acapella.type 
+              : 'audio/wav';
+              
+            const instrumentalType = typeof statusData.instrumental.type === 'string'
+              ? statusData.instrumental.type
+              : 'audio/wav';
+            
+            // Create object URLs for the audio files
+            const acapellaBlob = base64ToBlob(
+              statusData.acapella.data, 
+              acapellaType
+            );
+            
+            const instrumentalBlob = base64ToBlob(
+              statusData.instrumental.data, 
+              instrumentalType
+            );
+            
+            // Update the extracted stems with URLs and custom file names
+            setExtractedStems({
+              success: true,
+              acapella: {
+                data: typeof statusData.acapella.data === 'string' ? statusData.acapella.data : '',
+                url: URL.createObjectURL(acapellaBlob),
+                name: `${fileNameWithoutExt}_acapella.wav`,
+                type: acapellaType
+              },
+              instrumental: {
+                data: typeof statusData.instrumental.data === 'string' ? statusData.instrumental.data : '',
+                url: URL.createObjectURL(instrumentalBlob),
+                name: `${fileNameWithoutExt}_instrumental.wav`,
+                type: instrumentalType
+              }
             });
-            throw new Error('Response data is missing or has invalid structure');
+            
+            console.log('Processing completed successfully!');
+          } else if (statusData.status === 'FAILED') {
+            completed = true;
+            throw new Error(statusData.error || 'Processing failed');
+          } else {
+            // Still processing, continue polling
+            console.log(`Processing status: ${statusData.status || 'unknown'}`);
+          }
+        } catch (pollError: any) {
+          if (pollError.response && pollError.response.status === 404) {
+            // Job not found, stop polling
+            throw new Error('Processing job not found');
           }
           
-          // Create explicit type values for safety
-          const acapellaType = typeof response.data.acapella.type === 'string' 
-            ? response.data.acapella.type 
-            : 'audio/wav';
-            
-          const instrumentalType = typeof response.data.instrumental.type === 'string'
-            ? response.data.instrumental.type
-            : 'audio/wav';
+          // For transient errors, continue polling
+          console.warn(`Poll attempt ${attempts} failed:`, pollError.message);
           
-          // Create object URLs for the audio files - with strong validation
-          const acapellaBlob = base64ToBlob(
-            response.data.acapella.data, 
-            acapellaType
-          );
-          
-          const instrumentalBlob = base64ToBlob(
-            response.data.instrumental.data, 
-            instrumentalType
-          );
-          
-          // Update the extracted stems with URLs and custom file names
-          setExtractedStems({
-            success: true,
-            acapella: {
-              data: typeof response.data.acapella.data === 'string' ? response.data.acapella.data : '',
-              url: URL.createObjectURL(acapellaBlob),
-              name: `${fileNameWithoutExt}_acapella.wav`,
-              type: acapellaType
-            },
-            instrumental: {
-              data: typeof response.data.instrumental.data === 'string' ? response.data.instrumental.data : '',
-              url: URL.createObjectURL(instrumentalBlob),
-              name: `${fileNameWithoutExt}_instrumental.wav`,
-              type: instrumentalType
-            }
-          });
-        } catch (processingError: any) {
-          console.error('Error processing stem data:', processingError);
-          setProcessingError('Error processing audio data. Please try again.');
+          // If we've reached max attempts, throw an error
+          if (attempts >= maxAttempts) {
+            throw new Error('Processing is taking too long');
+          }
         }
-      } else {
-        const errorMsg = response?.data?.error || 'Failed to extract stems';
-        console.error('API returned error:', errorMsg);
-        setProcessingError(errorMsg);
+      }
+      
+      // If we've reached max attempts without completion, throw timeout error
+      if (!completed) {
+        throw new Error('Processing timed out. Please try again with a shorter audio file.');
       }
     } catch (error: any) {
       console.error('Error extracting stems:', error);
