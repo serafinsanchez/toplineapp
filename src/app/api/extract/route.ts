@@ -258,5 +258,5 @@ export const config = {
     responseLimit: '100mb',
   },
   runtime: 'nodejs',
-  maxDuration: 300, // 5 minutes
+  maxDuration: 60, // 60 seconds max for free plan
 }; 

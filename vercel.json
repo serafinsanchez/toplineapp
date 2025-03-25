@@ -7,7 +7,7 @@
   "functions": {
     "app/api/extract/route.ts": {
       "memory": 3008,
-      "maxDuration": 300
+      "maxDuration": 60
     },
     "app/api/process-start/route.ts": {
       "memory": 1024,
