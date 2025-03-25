@@ -7,36 +7,58 @@ import { Home, Upload, LayoutDashboard, CreditCard, LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 
+// Declare global refreshCredits function on window
+declare global {
+  interface Window {
+    refreshUserCredits: () => Promise<void>;
+  }
+}
+
 export function Header() {
   const { data: session } = useSession();
   const [credits, setCredits] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
-  useEffect(() => {
-    const fetchUserCredits = async () => {
-      if (session?.user?.id) {
-        setIsLoading(true);
-        
-        try {
-          // Get user credits from the API
-          const response = await fetch(`/api/credits?userId=${session.user.id}`);
-          if (response.ok) {
-            const data = await response.json();
-            setCredits(data.credits);
-          } else {
-            console.error("Error fetching credits from API");
-            setCredits(0);
-          }
-        } catch (error) {
-          console.error("Error fetching user credits:", error);
+  // Function to fetch user credits from API
+  const fetchUserCredits = async () => {
+    if (session?.user?.id) {
+      setIsLoading(true);
+      
+      try {
+        // Get user credits from the API
+        const response = await fetch(`/api/credits?userId=${session.user.id}`);
+        if (response.ok) {
+          const data = await response.json();
+          setCredits(data.credits);
+        } else {
+          console.error("Error fetching credits from API");
           setCredits(0);
-        } finally {
-          setIsLoading(false);
         }
+      } catch (error) {
+        console.error("Error fetching user credits:", error);
+        setCredits(0);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+
+  // Make fetchUserCredits available globally
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.refreshUserCredits = fetchUserCredits;
+    }
+    
+    return () => {
+      // Clean up when component unmounts
+      if (typeof window !== 'undefined') {
+        delete window.refreshUserCredits;
       }
     };
+  }, [session]);
 
+  useEffect(() => {
     if (session?.user?.id) {
       fetchUserCredits();
     } else {

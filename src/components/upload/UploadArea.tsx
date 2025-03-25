@@ -59,7 +59,7 @@ export function UploadArea() {
       // Step 2: Poll for job status
       let completed = false;
       let attempts = 0;
-      const maxAttempts = 40; // Poll for up to ~2 minutes (40 * 3 seconds)
+      const maxAttempts = 40;
       
       while (!completed && attempts < maxAttempts) {
         attempts++;
@@ -134,6 +134,16 @@ export function UploadArea() {
             });
             
             console.log('Processing completed successfully!');
+            
+            // Refresh credits in the header after successful extraction
+            if (window.refreshUserCredits && isAuthenticated) {
+              try {
+                await window.refreshUserCredits();
+                console.log('Credits refreshed in header');
+              } catch (refreshError) {
+                console.error('Error refreshing credits:', refreshError);
+              }
+            }
           } else if (statusData.status === 'FAILED') {
             completed = true;
             throw new Error(statusData.error || 'Processing failed');
