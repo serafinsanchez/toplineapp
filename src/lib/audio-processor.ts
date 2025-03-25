@@ -22,17 +22,27 @@ const API_KEY = process.env.MOISES_DEVELOPER_APIKEY || '2038d552-4626-45f9-8ce7-
 const API_BASE_URL = 'https://api.music.ai/api';
 const WORKFLOW = 'music-ai/stems-vocals-accompaniment';
 
-// Temporary directory for uploaded files
-const TEMP_DIR = path.join(process.cwd(), 'tmp');
+// Temporary directory for uploaded files - use /tmp for Vercel serverless environment
+const TEMP_DIR = process.env.VERCEL ? '/tmp' : path.join(process.cwd(), 'tmp');
 const RESULTS_DIR = path.join(TEMP_DIR, 'results');
 
 // Ensure directories exist
 if (!fs.existsSync(TEMP_DIR)) {
-  fs.mkdirSync(TEMP_DIR, { recursive: true });
+  try {
+    fs.mkdirSync(TEMP_DIR, { recursive: true });
+    console.log(`Created temp directory at ${TEMP_DIR}`);
+  } catch (error) {
+    console.error(`Failed to create temp directory at ${TEMP_DIR}:`, error);
+  }
 }
 
 if (!fs.existsSync(RESULTS_DIR)) {
-  fs.mkdirSync(RESULTS_DIR, { recursive: true });
+  try {
+    fs.mkdirSync(RESULTS_DIR, { recursive: true });
+    console.log(`Created results directory at ${RESULTS_DIR}`);
+  } catch (error) {
+    console.error(`Failed to create results directory at ${RESULTS_DIR}:`, error);
+  }
 }
 
 // Validate API key
@@ -158,28 +168,64 @@ async function checkJobStatus(jobId: string): Promise<MusicAiJobResponse> {
 async function waitForJobCompletion(jobId: string): Promise<MusicAiJobResponse> {
   console.log('Waiting for job to complete...');
   
-  let job: MusicAiJobResponse;
+  let job: MusicAiJobResponse | null = null;
   let attempts = 0;
-  const maxAttempts = 60; // 10 minutes with 10-second intervals
+  // Even more aggressive polling for better performance in serverless
+  const maxAttempts = 60; // 5 minutes with 5-second intervals
+  const checkInterval = 5000; // 5 seconds between checks
   
-  while (attempts < maxAttempts) {
-    job = await checkJobStatus(jobId);
-    
-    if (job.status === 'SUCCEEDED') {
-      console.log('✅ Job completed successfully!');
-      return job;
-    } else if (job.status === 'FAILED') {
-      console.error('❌ Job failed with the following details:');
-      console.error(JSON.stringify(job, null, 2));
-      throw new Error('Job failed to process');
+  try {
+    while (attempts < maxAttempts) {
+      try {
+        job = await checkJobStatus(jobId);
+        
+        if (!job) {
+          console.warn(`⚠️ Received null job object on attempt ${attempts+1}`);
+          await new Promise(resolve => setTimeout(resolve, checkInterval));
+          attempts++;
+          continue;
+        }
+        
+        // Handle job status string safely
+        const status = job.status ? job.status.toString() : 'UNKNOWN';
+        
+        if (status === 'SUCCEEDED') {
+          console.log('✅ Job completed successfully!');
+          return job;
+        } else if (status === 'FAILED') {
+          console.error('❌ Job failed with the following details:');
+          console.error(JSON.stringify(job, null, 2));
+          throw new Error('Job failed to process');
+        } else if (status === 'PROCESSING' || status === 'CREATED') {
+          // Job is still in progress - expected states
+          console.log(`Job status: ${status}. Checking again in ${checkInterval/1000} seconds... (attempt ${attempts+1}/${maxAttempts})`);
+        } else {
+          // Unexpected status - log but continue waiting
+          console.warn(`⚠️ Unexpected job status: ${status}. Continuing to wait...`);
+        }
+        
+        // Wait between checks
+        await new Promise(resolve => setTimeout(resolve, checkInterval)); 
+        attempts++;
+      } catch (error: any) {
+        console.error(`Error checking job status (attempt ${attempts+1}/${maxAttempts}):`, error.message);
+        
+        // If we get an error, wait a bit longer before retrying (backoff)
+        await new Promise(resolve => setTimeout(resolve, checkInterval * 2));
+        attempts++;
+        
+        // If we've already made several attempts, still fail gracefully
+        if (attempts >= Math.floor(maxAttempts / 2)) {
+          throw new Error(`Job status check failed too many times: ${error.message}`);
+        }
+      }
     }
-    
-    console.log(`Job status: ${job.status}. Waiting 10 seconds...`);
-    await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
-    attempts++;
+  } catch (error: any) {
+    console.error('Error in waitForJobCompletion:', error);
+    throw new Error(`Job monitoring failed: ${error.message}`);
   }
   
-  throw new Error('Job timed out');
+  throw new Error('Job processing timed out. Please try again with a smaller file.');
 }
 
 /**
@@ -187,6 +233,11 @@ async function waitForJobCompletion(jobId: string): Promise<MusicAiJobResponse> 
  */
 async function downloadStems(job: MusicAiJobResponse, outputDir: string): Promise<MusicAiStemResult> {
   console.log(`Downloading stems to ${outputDir}...`);
+  
+  // Extra defensive coding for production
+  if (!job) {
+    throw new Error('Job object is null or undefined');
+  }
   
   if (!job.result) {
     throw new Error('Job result is missing');
@@ -201,38 +252,94 @@ async function downloadStems(job: MusicAiJobResponse, outputDir: string): Promis
   let acapellaPath = '';
   let instrumentalPath = '';
   
-  // Download each stem
-  for (const [stemName, stemUrl] of Object.entries(result)) {
-    // Map the API's stem names to our desired output file names
-    let outputFileName = stemName;
-    if (stemName === 'vocals') {
-      outputFileName = 'acapella';
-    } else if (stemName === 'accompaniment') {
-      outputFileName = 'instrumental';
-    }
-    
-    const outputPath = path.join(outputDir, `${outputFileName}.wav`);
-    console.log(`Downloading ${stemName} to ${outputPath}...`);
-    
-    const response = await axios({
-      method: 'get',
-      url: stemUrl,
-      responseType: 'arraybuffer'
-    });
-    
-    await writeFileAsync(outputPath, response.data);
-    
-    if (stemName === 'vocals') {
-      acapellaPath = outputPath;
-    } else if (stemName === 'accompaniment') {
-      instrumentalPath = outputPath;
-    }
+  // Ensure result is a valid object that can be iterated
+  if (typeof result !== 'object' || result === null) {
+    console.error('Invalid job result format:', typeof result, result);
+    throw new Error(`Invalid job result format: got ${typeof result} instead of object`);
   }
   
-  // We no longer save the job-info.json file
+  // Extreme safety - stringify and then re-parse to ensure it's a clean object
+  let safeResult: Record<string, string>;
+  try {
+    // Parsing and stringifying can help normalize problematic objects in production
+    const resultStr = JSON.stringify(result);
+    safeResult = JSON.parse(resultStr);
+    console.log('Job result keys:', Object.keys(safeResult));
+  } catch (parseError: any) {
+    console.error('Error normalizing result object:', parseError);
+    throw new Error(`Failed to process job result: ${parseError.message}`);
+  }
   
+  // Download each stem - use try/catch for each stem to be more resilient
+  try {
+    // Safe way to iterate over entries with type checking
+    const entries = Object.entries(safeResult);
+    
+    if (!entries || !entries.length) {
+      throw new Error('No stems found in job result');
+    }
+    
+    console.log(`Found ${entries.length} stems to download`);
+    
+    for (const [stemName, stemUrl] of entries) {
+      // Ensure stemName and stemUrl are strings
+      if (typeof stemName !== 'string') {
+        console.error(`Invalid stem name:`, stemName);
+        continue;
+      }
+      
+      // Ensure stemUrl is a string
+      if (typeof stemUrl !== 'string') {
+        console.error(`Invalid stem URL for ${stemName}:`, stemUrl);
+        continue; // Skip this stem but try to process others
+      }
+      
+      // Map the API's stem names to our desired output file names
+      let outputFileName = stemName;
+      if (stemName === 'vocals') {
+        outputFileName = 'acapella';
+      } else if (stemName === 'accompaniment') {
+        outputFileName = 'instrumental';
+      }
+      
+      const outputPath = path.join(outputDir, `${outputFileName}.wav`);
+      console.log(`Downloading ${stemName} to ${outputPath}...`);
+      
+      // Add extra try/catch for each individual download to make it more robust
+      try {
+        const response = await axios({
+          method: 'get',
+          url: stemUrl,
+          responseType: 'arraybuffer',
+          timeout: 60000 // Increase to 60 second timeout to prevent hanging requests
+        });
+        
+        if (!response.data) {
+          console.error(`No data received for stem ${stemName}`);
+          continue;
+        }
+        
+        await writeFileAsync(outputPath, response.data);
+        console.log(`Successfully wrote ${outputPath}, size: ${response.data.length} bytes`);
+        
+        if (stemName === 'vocals') {
+          acapellaPath = outputPath;
+        } else if (stemName === 'accompaniment') {
+          instrumentalPath = outputPath;
+        }
+      } catch (downloadError: any) {
+        console.error(`Error downloading stem ${stemName}:`, downloadError.message);
+        // Continue to next stem instead of failing completely
+      }
+    }
+  } catch (error: any) {
+    console.error('Error during stem download:', error);
+    throw new Error(`Failed to download stems: ${error.message}`);
+  }
+  
+  // Check if we got all the required stems
   if (!acapellaPath || !instrumentalPath) {
-    throw new Error('Failed to download all required stems');
+    throw new Error('Failed to download all required stems. Please try again.');
   }
   
   return { acapellaPath, instrumentalPath };

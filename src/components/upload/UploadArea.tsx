@@ -45,33 +45,82 @@ export function UploadArea() {
         authenticated: isAuthenticated,
         sessionStatus: status,
         userId: session?.user?.id || null
+      }, {
+        // Add a longer timeout for the request
+        timeout: 180000 // 3 minutes
       });
       
       // Handle successful response
-      if (response.data.success) {
-        // Get file name without extension
-        const fileNameWithoutExt = fileDetails.name.substring(0, fileDetails.name.lastIndexOf('.')) || fileDetails.name;
-        
-        // Create object URLs for the audio files
-        const acapellaBlob = base64ToBlob(response.data.acapella.data, response.data.acapella.type);
-        const instrumentalBlob = base64ToBlob(response.data.instrumental.data, response.data.instrumental.type);
-        
-        // Update the extracted stems with URLs and custom file names
-        setExtractedStems({
-          ...response.data,
-          acapella: {
-            ...response.data.acapella,
-            url: URL.createObjectURL(acapellaBlob),
-            name: `${fileNameWithoutExt}_acapella.wav`
-          },
-          instrumental: {
-            ...response.data.instrumental,
-            url: URL.createObjectURL(instrumentalBlob),
-            name: `${fileNameWithoutExt}_instrumental.wav`
+      if (response?.data && response.data.success === true) {
+        try {
+          // Get file name without extension
+          const fileNameWithoutExt = fileDetails.name.substring(0, fileDetails.name.lastIndexOf('.')) || fileDetails.name;
+          
+          // Validate that response data contains the expected structure
+          const hasAcapellaData = response.data.acapella && 
+                                 typeof response.data.acapella === 'object' && 
+                                 typeof response.data.acapella.data === 'string';
+                                 
+          const hasInstrumentalData = response.data.instrumental && 
+                                     typeof response.data.instrumental === 'object' && 
+                                     typeof response.data.instrumental.data === 'string';
+          
+          if (!hasAcapellaData || !hasInstrumentalData) {
+            console.error('Invalid response structure:', {
+              hasAcapella: !!response.data.acapella,
+              acapellaType: typeof response.data.acapella,
+              hasAcapellaData: hasAcapellaData,
+              hasInstrumental: !!response.data.instrumental,
+              instrumentalType: typeof response.data.instrumental,
+              hasInstrumentalData: hasInstrumentalData
+            });
+            throw new Error('Response data is missing or has invalid structure');
           }
-        });
+          
+          // Create explicit type values for safety
+          const acapellaType = typeof response.data.acapella.type === 'string' 
+            ? response.data.acapella.type 
+            : 'audio/wav';
+            
+          const instrumentalType = typeof response.data.instrumental.type === 'string'
+            ? response.data.instrumental.type
+            : 'audio/wav';
+          
+          // Create object URLs for the audio files - with strong validation
+          const acapellaBlob = base64ToBlob(
+            response.data.acapella.data, 
+            acapellaType
+          );
+          
+          const instrumentalBlob = base64ToBlob(
+            response.data.instrumental.data, 
+            instrumentalType
+          );
+          
+          // Update the extracted stems with URLs and custom file names
+          setExtractedStems({
+            success: true,
+            acapella: {
+              data: typeof response.data.acapella.data === 'string' ? response.data.acapella.data : '',
+              url: URL.createObjectURL(acapellaBlob),
+              name: `${fileNameWithoutExt}_acapella.wav`,
+              type: acapellaType
+            },
+            instrumental: {
+              data: typeof response.data.instrumental.data === 'string' ? response.data.instrumental.data : '',
+              url: URL.createObjectURL(instrumentalBlob),
+              name: `${fileNameWithoutExt}_instrumental.wav`,
+              type: instrumentalType
+            }
+          });
+        } catch (processingError: any) {
+          console.error('Error processing stem data:', processingError);
+          setProcessingError('Error processing audio data. Please try again.');
+        }
       } else {
-        setProcessingError(response.data.error || 'Failed to extract stems');
+        const errorMsg = response?.data?.error || 'Failed to extract stems';
+        console.error('API returned error:', errorMsg);
+        setProcessingError(errorMsg);
       }
     } catch (error: any) {
       console.error('Error extracting stems:', error);
@@ -85,6 +134,9 @@ export function UploadArea() {
         // If it's a 403 error and we've already used the free trial, stop processing immediately
         if (error.response.status === 403 && errorMessage.includes('already jammed with our free trial')) {
           console.log('Free trial already used');
+        } else if (error.response.status === 504 || error.message.includes('timeout')) {
+          // Handle Gateway Timeout specifically with a more user-friendly message
+          setProcessingError('The process is taking too long. Please try with a shorter audio file (under 5 minutes).');
         }
       } else if (error.request) {
         // The request was made but no response was received
@@ -98,14 +150,44 @@ export function UploadArea() {
     }
   };
   
-  // Convert base64 to Blob
-  const base64ToBlob = (base64: string, type: string) => {
-    const binaryString = window.atob(base64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
+  // Convert base64 to Blob with better error handling
+  const base64ToBlob = (base64: string, type: string): Blob => {
+    try {
+      // Strict validation to prevent the "includes is not a function" error
+      if (typeof base64 !== 'string') {
+        console.error('Invalid base64 data type:', typeof base64);
+        return new Blob([], { type: type || 'audio/wav' });
+      }
+
+      if (!base64 || base64.length === 0) {
+        console.error('Empty base64 data');
+        return new Blob([], { type: type || 'audio/wav' });
+      }
+      
+      // Ensure MIME type is a string
+      const safeType = typeof type === 'string' && type.length > 0 
+        ? type 
+        : 'audio/wav';
+      
+      try {
+        const binaryString = window.atob(base64);
+        const bytes = new Uint8Array(binaryString.length);
+        
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        
+        return new Blob([bytes], { type: safeType });
+      } catch (atobError) {
+        console.error('Error in atob conversion:', atobError);
+        // If atob fails, it's not a valid base64 string
+        return new Blob([], { type: safeType });
+      }
+    } catch (error: any) {
+      console.error('Fatal error converting base64 to blob:', error);
+      // Return an empty blob as fallback
+      return new Blob([], { type: 'audio/wav' });
     }
-    return new Blob([bytes], { type });
   };
 
   // Process file function to handle files from any source
