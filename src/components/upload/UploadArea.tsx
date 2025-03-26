@@ -484,7 +484,7 @@ export function UploadArea() {
             type="button"
             className="text-blue-500 underline font-medium hover:text-blue-700 cursor-pointer"
             onClick={() => {
-              window.location.href = "http://localhost:3000/auth/signup";
+              window.location.href = `${process.env.NEXT_PUBLIC_APP_URL}/auth/signup`;
             }}
           >
             Create an account
@@ -500,7 +500,7 @@ export function UploadArea() {
 
   // Handle signup navigation
   const handleSignUp = () => {
-    window.location.href = "http://localhost:3000/auth/signup";
+    window.location.href = `${process.env.NEXT_PUBLIC_APP_URL}/auth/signup`;
   };
 
   return (
