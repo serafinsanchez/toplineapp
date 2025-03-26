@@ -23,8 +23,7 @@
     },
     "app/api/upload-large/route.ts": {
       "memory": 1024,
-      "maxDuration": 60,
-      "bodyLimit": "26mb"
+      "maxDuration": 60
     }
   },
   "rewrites": [
