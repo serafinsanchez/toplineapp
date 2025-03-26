@@ -396,34 +396,44 @@ export function UploadArea() {
           throw new Error(tokenResponse.data.error || "Failed to get upload token");
         }
         
-        const { uploadUrl, path, uploadId } = tokenResponse.data;
+        const { path, uploadId } = tokenResponse.data;
         
-        // Step 2: Create a FormData for the direct upload
+        console.log("Got upload token, using upload-large API as fallback");
+        
+        // Create a FormData object to upload the file
         const formData = new FormData();
         formData.append('file', file);
         
-        // Step 3: Upload directly to Supabase storage
-        return axios.post(uploadUrl, formData, {
+        // Use the server-side upload-large API as a fallback
+        // This routes through our backend with admin credentials
+        return axios.post('/api/upload-large', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          },
           onUploadProgress: (progressEvent) => {
             console.log(`Upload progress: ${Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1))}%`);
           }
         })
-        .then(() => {
-          // Step 4: Notify our backend the upload is complete to get the URL
-          return axios.post('/api/upload-complete', {
-            filename: file.name,
-            uploadId: uploadId
-          });
+        .then(response => {
+          if (response.data.success) {
+            return {
+              success: true,
+              filePath: response.data.filePath,
+              url: response.data.url
+            };
+          } else {
+            throw new Error(response.data.error || "Upload failed");
+          }
         });
       })
       .then(response => {
-        if (response?.data?.success) {
+        if (response?.success) {
           setFileDetails({
             name: file.name,
             size: file.size,
             type: file.type,
-            path: response.data.filePath,
-            url: response.data.url,
+            path: response.filePath,
+            url: response.url,
             isSupabaseStorage: true
           });
           setIsValidFile(true);
@@ -431,7 +441,7 @@ export function UploadArea() {
           // Check free trial status
           checkFreeTrialStatus();
         } else {
-          throw new Error(response?.data?.error || "Upload failed");
+          throw new Error("Upload failed");
         }
       })
       .catch(error => {

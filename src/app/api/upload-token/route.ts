@@ -36,14 +36,24 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    // Return the presigned URL and other metadata
+    // Log the data to help debug
+    console.log('Signed URL data:', {
+      url: data.signedUrl,
+      token: data.token,
+      path: filePath
+    });
+    
+    // Instead of using signedUrl directly, we'll use a 2-step upload process
+    // Step 1: Get an admin-authorized upload path using the service role
+    const uploadPath = filePath;
+    
+    // Return the information needed for direct upload
     return NextResponse.json({
       success: true,
-      uploadUrl: data.signedUrl,
-      path: filePath,
       uploadId,
-      // Include Supabase's fields if available
-      ...(data.token && { token: data.token }),
+      path: filePath,
+      directUpload: true,
+      method: 'PUT', // Supabase client uses PUT for direct uploads
       // Include any extra information needed for the upload
       fileType,
       filename: uniqueFileName

@@ -23,8 +23,11 @@ export async function POST(request: NextRequest) {
       );
     }
     
+    console.log(`Processing upload for file: ${file.name}, size: ${file.size}, type: ${file.type}`);
+    
     // Check file size
     if (file.size > MAX_FILE_SIZE) {
+      console.warn(`File size ${file.size} exceeds limit of ${MAX_FILE_SIZE}`);
       return NextResponse.json(
         { success: false, error: `File size exceeds the ${MAX_FILE_SIZE / (1024 * 1024)}MB limit` },
         { status: 400 }
@@ -37,6 +40,7 @@ export async function POST(request: NextRequest) {
     const isValidExtension = ["mp3", "wav", "aiff"].includes(fileExtension || "");
     
     if (!validTypes.includes(file.type) && !isValidExtension) {
+      console.warn(`Invalid file type: ${file.type}, extension: ${fileExtension}`);
       return NextResponse.json(
         { success: false, error: `File type '${file.type}' not supported` },
         { status: 400 }
@@ -46,6 +50,7 @@ export async function POST(request: NextRequest) {
     // Read the file content
     const arrayBuffer = await file.arrayBuffer();
     const fileBuffer = Buffer.from(arrayBuffer);
+    console.log(`File buffer created, size: ${fileBuffer.byteLength}`);
     
     // Generate a unique filename
     const uniqueFileName = `${Date.now()}_${uuidv4()}_${file.name.replace(/\s+/g, '_')}`;
@@ -56,7 +61,6 @@ export async function POST(request: NextRequest) {
     
     try {
       // First, check that the bucket has proper CORS settings
-      // This is a one-time operation we're doing for diagnostic purposes
       try {
         const { data: bucketData, error: bucketError } = await supabaseAdmin
           .storage
@@ -70,11 +74,13 @@ export async function POST(request: NextRequest) {
         console.log('Unable to check bucket settings:', bucketCheckError);
       }
       
+      console.log(`Uploading file to Supabase storage: ${filePath}`);
+      
       // Upload file to Supabase storage with public access
       const { data, error } = await supabaseAdmin.storage
         .from('audio-uploads')
         .upload(filePath, fileBuffer, {
-          contentType: file.type,
+          contentType: file.type || 'audio/mpeg', // Provide default contentType if not available
           cacheControl: '3600',
           upsert: false
         });
@@ -82,81 +88,49 @@ export async function POST(request: NextRequest) {
       if (error) {
         console.error('Error uploading file to Supabase:', error);
         return NextResponse.json(
-          { success: false, error: 'Failed to upload file' },
+          { success: false, error: `Failed to upload file: ${error.message}` },
           { status: 500 }
         );
       }
       
-      // Now, explicitly make the file public by setting appropriate bucket and file policies
+      // Get public URL for the file
+      const { data: { publicUrl } } = supabaseAdmin.storage
+        .from('audio-uploads')
+        .getPublicUrl(filePath);
+        
+      // Verify the URL is working by making a server-side request
       try {
-        // First make sure the bucket is set to public
-        try {
-          await supabaseAdmin.storage.updateBucket('audio-uploads', {
-            public: true,
-            allowedMimeTypes: ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/aiff', 'audio/x-aiff'],
-            fileSizeLimit: MAX_FILE_SIZE
-          });
-        } catch (bucketError) {
-          console.warn('Note: Could not update bucket settings (may need admin permission):', bucketError);
-          // Continue anyway as we may not need to update the bucket
+        // We'll use the Node fetch API to check if the file is accessible
+        const testRequest = await fetch(publicUrl, { method: 'HEAD' });
+        if (!testRequest.ok) {
+          console.warn(`Warning: File URL is not accessible: ${testRequest.status} ${testRequest.statusText}`);
+        } else {
+          console.log('File URL is publicly accessible');
         }
-        
-        // Get public URL for the file
-        const { data: { publicUrl } } = supabaseAdmin.storage
-          .from('audio-uploads')
-          .getPublicUrl(filePath);
-          
-        // Verify the URL is working by making a server-side request
-        try {
-          // We'll use the Node fetch API to check if the file is accessible
-          const testRequest = await fetch(publicUrl, { method: 'HEAD' });
-          if (!testRequest.ok) {
-            console.warn(`Warning: File URL is not accessible: ${testRequest.status} ${testRequest.statusText}`);
-            // We'll continue anyway as the URL might work from the server during processing
-          } else {
-            console.log('File URL is publicly accessible');
-          }
-        } catch (fetchError) {
-          console.warn('Warning: Could not verify file URL:', fetchError);
-          // Continue anyway as the URL might still work from the server
-        }
-        
-        console.log(`File uploaded successfully: ${filePath}`);
-        console.log(`Public URL: ${publicUrl}`);
-        
-        return NextResponse.json({
-          success: true,
-          filePath: filePath,
-          url: publicUrl,
-          bucketIsPublic: true
-        });
-      } catch (accessError) {
-        console.warn('Error updating file permissions:', accessError);
-        
-        // Still return success but with a warning flag
-        const { data: { publicUrl } } = supabaseAdmin.storage
-          .from('audio-uploads')
-          .getPublicUrl(filePath);
-          
-        return NextResponse.json({
-          success: true,
-          filePath: filePath,
-          url: publicUrl,
-          warningFlag: true,
-          message: 'File uploaded but public access could not be verified'
-        });
+      } catch (fetchError) {
+        console.warn('Warning: Could not verify file URL:', fetchError);
       }
-    } catch (uploadError) {
+      
+      console.log(`File uploaded successfully: ${filePath}`);
+      console.log(`Public URL: ${publicUrl}`);
+      
+      return NextResponse.json({
+        success: true,
+        filePath: filePath,
+        url: publicUrl,
+        bucketIsPublic: true
+      });
+    } catch (uploadError: any) {
       console.error('Fatal error during upload:', uploadError);
       return NextResponse.json(
-        { success: false, error: 'Internal server error during upload' },
+        { success: false, error: `Internal server error during upload: ${uploadError.message}` },
         { status: 500 }
       );
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error processing upload:', error);
     return NextResponse.json(
-      { success: false, error: 'Server error' },
+      { success: false, error: `Server error: ${error.message}` },
       { status: 500 }
     );
   }
