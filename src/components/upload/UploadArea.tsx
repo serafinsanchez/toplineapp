@@ -15,6 +15,7 @@ import { ProcessingStatus } from "./ProcessingStatus";
 import { useSession } from "next-auth/react";
 import { CREDIT_REFRESH_EVENT } from "@/components/layout/Header";
 import { uploadFileToStorage } from "@/lib/supabase";
+import { uploadLargeFileToSupabase } from "@/lib/upload-helpers";
 
 export function UploadArea() {
   const [fileDetails, setFileDetails] = useState<FileDetails | null>(null);
@@ -358,104 +359,134 @@ export function UploadArea() {
 
   // Handle large file uploads for authenticated users
   const handleAuthenticatedLargeFileUpload = (file: File) => {
-    console.log("User authenticated, using Supabase client directly");
+    console.log("User authenticated, using direct Supabase upload");
     
-    // Use the Supabase client to upload the file directly
-    uploadFileToStorage(file, 'uploads')
-      .then(result => {
-        if (result.success && result.url && result.path) {
-          setFileDetails({
-            name: file.name,
-            size: file.size,
-            type: file.type,
-            path: result.path,
-            url: result.url,
-            isSupabaseStorage: true
+    // Use direct Supabase upload for all users (both logged in and logged out)
+    // This completely bypasses the Vercel serverless functions
+    uploadLargeFileToSupabase(
+      file, 
+      'audio-uploads', 
+      'uploads',
+      (progress) => {
+        // Update progress in UI if needed
+        console.log(`Upload progress: ${Math.round(progress * 100)}%`);
+      }
+    )
+    .then(result => {
+      if (result.success && result.url && result.filePath) {
+        // Verify the upload with our backend
+        return axios.post('/api/upload-verify', { filePath: result.filePath })
+          .then(verifyResponse => {
+            if (verifyResponse.data.success) {
+              return {
+                success: true,
+                filePath: result.filePath,
+                url: verifyResponse.data.url || result.url
+              };
+            } else {
+              throw new Error('Failed to verify upload');
+            }
+          })
+          .catch(verifyError => {
+            console.warn('Upload verification warning:', verifyError);
+            // Continue even if verification fails, using the original result
+            return {
+              success: true,
+              filePath: result.filePath,
+              url: result.url,
+              verified: false
+            };
           });
-          setIsValidFile(true);
-          setFreeTrialUsed(false); // Authenticated users use credits, not free trial
-        } else {
-          throw new Error(result.error?.message || 'Failed to upload file to storage');
-        }
-      })
-      .catch(error => {
-        console.error('Error uploading to Supabase:', error);
-        setDropError(error.message || 'Failed to upload file. Please try again.');
-        setIsValidFile(false);
+      } else {
+        throw new Error(result.error?.message || 'Failed to upload file to storage');
+      }
+    })
+    .then(result => {
+      setFileDetails({
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        path: result.filePath,
+        url: result.url,
+        isSupabaseStorage: true
       });
+      setIsValidFile(true);
+      setFreeTrialUsed(false); // Authenticated users use credits, not free trial
+    })
+    .catch(error => {
+      console.error('Error uploading to Supabase:', error);
+      setDropError(error.message || 'Failed to upload file. Please try again.');
+      setIsValidFile(false);
+    });
   };
 
   // Handle large file uploads for unauthenticated users
   const handleUnauthenticatedLargeFileUpload = (file: File) => {
-    console.log("User not authenticated, using token-based upload");
+    console.log("User not authenticated, using direct Supabase upload");
     
-    // Step 1: Get a token for the upload
-    axios.get(`/api/upload-token?filename=${encodeURIComponent(file.name)}&fileType=${encodeURIComponent(file.type)}`)
-      .then(tokenResponse => {
-        if (!tokenResponse.data.success) {
-          throw new Error(tokenResponse.data.error || "Failed to get upload token");
-        }
-        
-        const { path, uploadId } = tokenResponse.data;
-        
-        console.log("Got upload token, using upload-large API as fallback");
-        
-        // Create a FormData object to upload the file
-        const formData = new FormData();
-        formData.append('file', file);
-        
-        // Use the server-side upload-large API as a fallback
-        // This routes through our backend with admin credentials
-        return axios.post('/api/upload-large', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          },
-          onUploadProgress: (progressEvent) => {
-            console.log(`Upload progress: ${Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1))}%`);
-          }
-        })
-        .then(response => {
-          if (response.data.success) {
+    // Track upload progress for UI feedback
+    setIsValidFile(null);
+    
+    // Use direct Supabase upload for all users (both logged in and logged out)
+    // This completely bypasses the Vercel serverless functions
+    uploadLargeFileToSupabase(
+      file, 
+      'audio-uploads', 
+      'uploads',
+      (progress) => {
+        // Update progress in UI if needed
+        console.log(`Upload progress: ${Math.round(progress * 100)}%`);
+      }
+    )
+    .then(result => {
+      if (result.success && result.url && result.filePath) {
+        // Verify the upload with our backend
+        return axios.post('/api/upload-verify', { filePath: result.filePath })
+          .then(verifyResponse => {
+            if (verifyResponse.data.success) {
+              return {
+                success: true,
+                filePath: result.filePath,
+                url: verifyResponse.data.url || result.url
+              };
+            } else {
+              throw new Error('Failed to verify upload');
+            }
+          })
+          .catch(verifyError => {
+            console.warn('Upload verification warning:', verifyError);
+            // Continue even if verification fails, using the original result
             return {
               success: true,
-              filePath: response.data.filePath,
-              url: response.data.url
+              filePath: result.filePath,
+              url: result.url,
+              verified: false
             };
-          } else {
-            throw new Error(response.data.error || "Upload failed");
-          }
-        });
-      })
-      .then(response => {
-        if (response?.success) {
-          setFileDetails({
-            name: file.name,
-            size: file.size,
-            type: file.type,
-            path: response.filePath,
-            url: response.url,
-            isSupabaseStorage: true
           });
-          setIsValidFile(true);
-          
-          // Check free trial status
-          checkFreeTrialStatus();
-        } else {
-          throw new Error("Upload failed");
-        }
-      })
-      .catch(error => {
-        console.error('Error uploading file:', error);
-        
-        // Handle specific error cases
-        if (error.response && error.response.status === 413) {
-          setDropError('The file size is too large for upload. Please try a smaller file (under 25MB) or sign in to upload larger files.');
-        } else {
-          setDropError(error.message || 'Failed to upload file. Please try again.');
-        }
-        
-        setIsValidFile(false);
+      } else {
+        throw new Error(result.error?.message || 'Upload failed');
+      }
+    })
+    .then(result => {
+      setFileDetails({
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        path: result.filePath,
+        url: result.url,
+        isSupabaseStorage: true
       });
+      setIsValidFile(true);
+      
+      // Check free trial status
+      checkFreeTrialStatus();
+    })
+    .catch(error => {
+      console.error('Error uploading file:', error);
+      
+      setDropError(error.message || 'Failed to upload file. Please try again.');
+      setIsValidFile(false);
+    });
   };
 
   // Helper to check free trial status
