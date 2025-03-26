@@ -7,18 +7,14 @@ const nextConfig = {
   },
   // Support for large file uploads
   experimental: {
-    serverComponentsExternalPackages: ['sharp'],
     serverActions: {
       bodySizeLimit: '26mb',
     },
   },
-  // Properly configure API routes (for pages/api routes)
-  api: {
-    bodyParser: {
-      sizeLimit: '26mb'
-    },
-    responseLimit: '26mb'
-  }
+  // External packages for server components
+  serverExternalPackages: ['sharp'],
+  // Response size limit
+  responseLimit: '26mb'
 }
 
 module.exports = nextConfig 

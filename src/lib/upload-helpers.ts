@@ -26,6 +26,17 @@ export async function uploadLargeFileToSupabase(
       onProgress = (p) => console.log(`Upload progress: ${Math.round(p * 100)}%`);
     }
     
+    // Track progress ourselves if needed
+    let progressInterval: any = null;
+    if (onProgress) {
+      let progress = 0;
+      progressInterval = setInterval(() => {
+        progress += 0.05; // Simulate progress
+        if (progress > 0.95) progress = 0.95; // Cap at 95% until complete
+        onProgress?.(progress);
+      }, 500);
+    }
+    
     // Upload the file directly to Supabase
     const { data, error } = await supabasePublic.storage
       .from(bucket)
@@ -33,15 +44,14 @@ export async function uploadLargeFileToSupabase(
         cacheControl: '3600',
         upsert: false,
         contentType: file.type,
-        duplex: 'half',
-        // Add onUploadProgress callback for progress tracking
-        onUploadProgress: (event) => {
-          if (event.total) {
-            const progress = event.loaded / event.total;
-            onProgress?.(progress);
-          }
-        }
+        duplex: 'half'
       });
+    
+    // Clear progress interval
+    if (progressInterval) {
+      clearInterval(progressInterval);
+      onProgress?.(1.0); // 100% complete
+    }
     
     if (error) {
       console.error('Error uploading to Supabase:', error);
