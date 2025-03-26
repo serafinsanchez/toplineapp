@@ -101,6 +101,52 @@ export interface Database {
         }
         Relationships: []
       }
+      processing_jobs: {
+        Row: {
+          id: number
+          process_id: string
+          job_id: string
+          user_id: string | null
+          status: string
+          error: string | null
+          created_at: string
+          updated_at: string
+          acapella_path: string | null
+          instrumental_path: string | null
+        }
+        Insert: {
+          id?: number
+          process_id: string
+          job_id: string
+          user_id?: string | null
+          status: string
+          error?: string | null
+          created_at?: string
+          updated_at?: string
+          acapella_path?: string | null
+          instrumental_path?: string | null
+        }
+        Update: {
+          id?: number
+          process_id?: string
+          job_id?: string
+          user_id?: string | null
+          status?: string
+          error?: string | null
+          created_at?: string
+          updated_at?: string
+          acapella_path?: string | null
+          instrumental_path?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "processing_jobs_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -114,6 +160,10 @@ export interface Database {
           p_stripe_transaction_id?: string
         }
         Returns: string
+      }
+      update_updated_at_column: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
       }
     }
     Enums: {
@@ -129,6 +179,7 @@ export interface Database {
 export type UserProfile = Database['public']['Tables']['user_profiles']['Row']
 export type Transaction = Database['public']['Tables']['transactions']['Row']
 export type FreeTrialUsage = Database['public']['Tables']['free_trial_usage']['Row']
+export type ProcessingJob = Database['public']['Tables']['processing_jobs']['Row']
 
 // Helper types for transaction types
 export type TransactionType = 'purchase' | 'use' 

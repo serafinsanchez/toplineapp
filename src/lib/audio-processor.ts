@@ -3,13 +3,12 @@ import path from 'path';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import { promisify } from 'util';
-import { handleCreditTransaction, supabase } from './supabase';
+import { handleCreditTransaction, supabase, createServiceRoleClient } from '@/lib/supabase';
 import { 
   MusicAiUploadResponse, 
   MusicAiJobResponse, 
   MusicAiStemResult 
 } from '../types';
-import { createServiceRoleClient } from './supabase';
 
 // Promisify fs functions
 const writeFileAsync = promisify(fs.writeFile);
@@ -114,29 +113,52 @@ export async function uploadFile(filePath: string): Promise<string> {
  */
 export async function createJob(inputUrl: string): Promise<string> {
   console.log(`Creating job with workflow: ${WORKFLOW}...`);
+  console.log(`Input URL: ${inputUrl.substring(0, 100)}...`);
+  
+  // Validate inputUrl
+  if (!inputUrl || typeof inputUrl !== 'string') {
+    throw new Error('Invalid input URL provided');
+  }
   
   try {
+    // Remove the health check as it's returning 404 errors
+    // Music.ai API doesn't seem to have a /health endpoint
+    
+    // Create the actual job
+    const jobName = `Acapella Extraction ${new Date().toISOString()}`;
+    console.log(`Creating job "${jobName}" with input URL`);
+    
     const jobResponse = await axios.post<MusicAiJobResponse>(`${API_BASE_URL}/job`, {
-      name: `Acapella Extraction ${new Date().toISOString()}`,
+      name: jobName,
       workflow: WORKFLOW,
       params: { inputUrl }
     }, {
       headers: {
         'Authorization': API_KEY,
         'Content-Type': 'application/json'
-      }
+      },
+      timeout: 30000 // 30-second timeout
     });
     
+    if (!jobResponse.data || !jobResponse.data.id) {
+      throw new Error('Job creation response did not include a job ID');
+    }
+    
+    console.log(`Job created successfully with ID: ${jobResponse.data.id}`);
     return jobResponse.data.id;
   } catch (error: any) {
     console.error('❌ Error creating job:');
     if (error.response) {
       console.error(`Status: ${error.response.status}`);
       console.error('Response:', error.response.data);
+      throw new Error(`Failed to create job: ${error.response.status} - ${JSON.stringify(error.response.data)}`);
+    } else if (error.request) {
+      console.error('No response received:', error.request);
+      throw new Error('Failed to create job: No response from server');
     } else {
       console.error(error.message);
+      throw new Error(`Failed to create job: ${error.message}`);
     }
-    throw new Error('Failed to create job');
   }
 }
 
@@ -458,5 +480,110 @@ export async function cleanupFiles(filePaths: string[]): Promise<void> {
     }
   } catch (error) {
     console.error('Error cleaning up files:', error);
+  }
+}
+
+/**
+ * Download file from URL (for Supabase files) and save to temp directory
+ */
+export async function downloadFileFromUrl(fileUrl: string): Promise<string> {
+  console.log(`Downloading file from URL: ${fileUrl}...`);
+  
+  try {
+    let finalUrl = fileUrl;
+    
+    // Handle Supabase storage URLs
+    if (fileUrl.includes('supabase.co/storage/v1/object/public')) {
+      // This is a public Supabase URL
+      console.log('Detected Supabase storage URL');
+      
+      // For Supabase URLs, we may need to get a signed URL using the service role client
+      // If the URL already contains a token, we'll use it directly
+      if (!fileUrl.includes('token=')) {
+        try {
+          console.log('Getting signed URL for Supabase storage object');
+          const supabaseAdmin = createServiceRoleClient();
+          
+          // Extract bucket and path from URL
+          // Format: https://<project>.supabase.co/storage/v1/object/public/<bucket>/<path>
+          const urlParts = fileUrl.split('/public/');
+          if (urlParts.length > 1) {
+            const pathParts = urlParts[1].split('/');
+            const bucket = pathParts[0];
+            const path = pathParts.slice(1).join('/');
+            
+            console.log(`Extracted bucket: ${bucket}, path: ${path}`);
+            
+            // Get signed URL that works for 60 seconds
+            const { data, error } = await supabaseAdmin
+              .storage
+              .from(bucket)
+              .createSignedUrl(path, 60);
+            
+            if (error) {
+              console.error('Error creating signed URL:', error);
+            } else if (data?.signedUrl) {
+              finalUrl = data.signedUrl;
+              console.log('Successfully created signed URL');
+            }
+          }
+        } catch (signedUrlError) {
+          console.error('Error getting signed URL:', signedUrlError);
+          // Continue with the original URL if we can't get a signed URL
+        }
+      }
+    }
+    
+    // Use axios for better logging and error handling
+    console.log(`Downloading from: ${finalUrl.split('?')[0]}...`);
+    const response = await axios({
+      method: 'get',
+      url: finalUrl,
+      responseType: 'arraybuffer',
+      timeout: 30000, // 30 second timeout
+      headers: {
+        'User-Agent': 'Topline-Server/1.0',
+        'X-Topline-Client': 'Server'
+      }
+    });
+    
+    if (!response.data || response.data.byteLength === 0) {
+      throw new Error('Received empty file from server');
+    }
+    
+    // Generate a unique filename
+    const fileId = uuidv4();
+    let fileExt = '.mp3'; // Default to mp3, but we should try to detect from URL or Content-Type
+    
+    // Try to detect extension from content-type
+    const contentType = response.headers['content-type'];
+    if (contentType) {
+      if (contentType.includes('wav')) {
+        fileExt = '.wav';
+      } else if (contentType.includes('aiff')) {
+        fileExt = '.aiff';
+      }
+    }
+    
+    // Try to detect extension from URL
+    const urlParts = fileUrl.split('?')[0].split('.');
+    if (urlParts.length > 1) {
+      const extension = `.${urlParts[urlParts.length - 1].toLowerCase()}`;
+      if (['.mp3', '.wav', '.aiff', '.m4a', '.ogg', '.flac'].includes(extension)) {
+        fileExt = extension;
+      }
+    }
+    
+    const safeFilename = `${fileId}${fileExt}`;
+    const filePath = path.join(TEMP_DIR, safeFilename);
+    
+    await writeFileAsync(filePath, Buffer.from(response.data));
+    
+    const stats = fs.statSync(filePath);
+    console.log(`File downloaded and saved to ${filePath} (size: ${Math.round(stats.size / 1024)} KB)`);
+    return filePath;
+  } catch (error: any) {
+    console.error('Error downloading file from URL:', error);
+    throw new Error(`Failed to download file from URL: ${error.message || 'Unknown error'}`);
   }
 } 
