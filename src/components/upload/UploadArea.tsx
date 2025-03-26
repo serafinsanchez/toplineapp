@@ -14,6 +14,7 @@ import { SparklesCore } from "@/components/ui/sparkles";
 import { ProcessingStatus } from "./ProcessingStatus";
 import { useSession } from "next-auth/react";
 import { CREDIT_REFRESH_EVENT } from "@/components/layout/Header";
+import { uploadFileToStorage } from "@/lib/supabase";
 
 export function UploadArea() {
   const [fileDetails, setFileDetails] = useState<FileDetails | null>(null);
@@ -48,15 +49,31 @@ export function UploadArea() {
       setProcessingError(null);
       setExtractedStems(null);
       
-      // Step 1: Start the processing job
-      console.log("Starting processing job...");
-      const startResponse = await axios.post('/api/process-start', {
-        filePath: fileDetails.path,
-        authenticated: isAuthenticated,
-        sessionStatus: status,
-        userId: session?.user?.id || null
-      }, {
-        timeout: 30000 // 30 seconds is enough to start the job
+      // Prepare request payload
+      console.log("File details:", {
+        name: fileDetails.name,
+        size: fileDetails.size,
+        type: fileDetails.type,
+        path: fileDetails.path,
+        hasUrl: !!fileDetails.url,
+        isSupabaseStorage: fileDetails.isSupabaseStorage
+      });
+      
+      // Send the file URL or path
+      let processRequest;
+      if (fileDetails.url) {
+        console.log(`Using URL for processing: ${fileDetails.url.substring(0, 50)}...`);
+        processRequest = { url: fileDetails.url };
+      } else {
+        console.log(`Using file path for processing: ${fileDetails.path}`);
+        processRequest = { url: fileDetails.path };
+      }
+      
+      console.log("Starting processing job with request:", processRequest);
+      
+      // Start the processing job
+      const startResponse = await axios.post('/api/process-start', processRequest, {
+        timeout: 60000 // Increase timeout to 60 seconds for large files
       });
       
       if (!startResponse.data.success) {
@@ -69,21 +86,23 @@ export function UploadArea() {
       // Step 2: Poll for job status
       let completed = false;
       let attempts = 0;
-      const maxAttempts = 40;
+      const maxAttempts = 60; // Increase max attempts
       
       while (!completed && attempts < maxAttempts) {
         attempts++;
         
         try {
-          // Wait 3 seconds between polls
-          await new Promise(resolve => setTimeout(resolve, 3000));
+          // Wait 5 seconds between polls for more stability
+          await new Promise(resolve => setTimeout(resolve, 5000));
           
           // Check the job status
+          console.log(`Checking status for process ID: ${processId} (attempt ${attempts}/${maxAttempts})`);
           const statusResponse = await axios.get(`/api/process-status?processId=${processId}`, {
             timeout: 30000 // 30 seconds timeout for status check
           });
           
           const statusData = statusResponse.data;
+          console.log(`Status response:`, statusData);
           
           if (statusData.status === 'COMPLETED') {
             completed = true;
@@ -260,6 +279,7 @@ export function UploadArea() {
   const processFile = (file: File) => {
     console.log("Processing file:", file);
     console.log("File type:", file.type);
+    console.log("File size:", formatFileSize(file.size));
     
     // Clear previous errors and results
     setDropError(null);
@@ -274,50 +294,126 @@ export function UploadArea() {
     // Accept either by MIME type or by extension
     const isValid = validTypes.includes(file.type) || isValidExtension;
     console.log("Is valid file:", isValid, "Extension:", fileExtension);
-    
-    // Create a FormData object to upload the file
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    // Upload the file to get the file path
-    axios.post('/api/upload', formData)
-      .then(response => {
-        if (response.data.success) {
-          setFileDetails({
-            name: file.name,
-            size: file.size,
-            type: file.type,
-            path: response.data.filePath
-          });
-          setIsValidFile(isValid);
-          
-          // Only check free trial for non-authenticated users
-          if (!isAuthenticated) {
-            // Check if free trial has been used
-            axios.get('/api/free-trial/check')
-              .then(freeTrialResponse => {
-                setFreeTrialUsed(freeTrialResponse.data.used === true);
-              })
-              .catch(error => {
-                console.error('Error checking free trial status:', error);
-              });
-          } else {
-            // For authenticated users, assume they can use their credits
-            setFreeTrialUsed(false);
-          }
-        } else {
-          setDropError(response.data.error || 'Failed to upload file');
-          setIsValidFile(false);
-        }
-      })
-      .catch(error => {
-        console.error('Error uploading file:', error);
-        setDropError(error.response?.data?.error || error.message || 'Failed to upload file');
-        setIsValidFile(false);
-      });
-    
+
     if (!isValid) {
       setDropError(`File type '${file.type}' not supported. Please upload MP3, WAV, or AIFF files.`);
+      return;
+    }
+    
+    // Set loading state
+    setIsValidFile(null);
+    
+    // File size threshold for using Supabase storage (4MB = 4 * 1024 * 1024 bytes)
+    const fileSizeThreshold = 4 * 1024 * 1024; // 4MB
+    
+    // For smaller files, use the existing API upload method
+    if (file.size <= fileSizeThreshold) {
+      // Create a FormData object to upload the file
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      // Upload the file to get the file path
+      axios.post('/api/upload', formData)
+        .then(response => {
+          if (response.data.success) {
+            setFileDetails({
+              name: file.name,
+              size: file.size,
+              type: file.type,
+              path: response.data.filePath,
+              isSupabaseStorage: false
+            });
+            setIsValidFile(true);
+            
+            // Only check free trial for non-authenticated users
+            if (!isAuthenticated) {
+              // Check if free trial has been used
+              axios.get('/api/free-trial/check')
+                .then(freeTrialResponse => {
+                  setFreeTrialUsed(freeTrialResponse.data.used === true);
+                })
+                .catch(error => {
+                  console.error('Error checking free trial status:', error);
+                });
+            } else {
+              // For authenticated users, assume they can use their credits
+              setFreeTrialUsed(false);
+            }
+          } else {
+            setDropError(response.data.error || 'Failed to upload file');
+            setIsValidFile(false);
+          }
+        })
+        .catch(error => {
+          console.error('Error uploading file:', error);
+          setDropError(error.response?.data?.error || error.message || 'Failed to upload file');
+          setIsValidFile(false);
+        });
+    } else {
+      // For larger files, use the server-side API that bypasses RLS
+      // Create a FormData object to upload the file
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      // Show loading state while uploading
+      setIsValidFile(null);
+      
+      // Upload using server-side endpoint that uses admin privileges
+      axios.post('/api/upload-large', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        },
+        onUploadProgress: (progressEvent) => {
+          console.log(`Upload progress: ${Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1))}%`);
+        }
+      })
+        .then(response => {
+          if (response.data.success) {
+            setFileDetails({
+              name: file.name,
+              size: file.size,
+              type: file.type,
+              path: response.data.filePath,
+              url: response.data.url,
+              isSupabaseStorage: true
+            });
+            setIsValidFile(true);
+            
+            // Only check free trial for non-authenticated users
+            if (!isAuthenticated) {
+              // Check if free trial has been used
+              axios.get('/api/free-trial/check')
+                .then(freeTrialResponse => {
+                  setFreeTrialUsed(freeTrialResponse.data.used === true);
+                })
+                .catch(error => {
+                  console.error('Error checking free trial status:', error);
+                });
+            } else {
+              // For authenticated users, assume they can use their credits
+              setFreeTrialUsed(false);
+            }
+          } else {
+            console.error('Failed to upload large file:', response.data.error);
+            // Handle 413 Payload Too Large error specifically
+            if (response.data.status === 413) {
+              setDropError('The file size is too large for upload. Please try a smaller file (under 25MB).');
+            } else {
+              setDropError(response.data.error || 'Failed to upload file. Please try again.');
+            }
+            setIsValidFile(false);
+          }
+        })
+        .catch(error => {
+          console.error('Error uploading large file:', error);
+          // Handle 413 Payload Too Large error specifically
+          if (error.response && error.response.status === 413) {
+            setDropError('The file size is too large for upload. Please try a smaller file (under 25MB).');
+          } else {
+            setDropError(error.response?.data?.error || 'Failed to upload file. Please try again.');
+          }
+          setIsValidFile(false);
+        });
     }
   };
 
