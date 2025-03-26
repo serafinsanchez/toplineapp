@@ -35,6 +35,15 @@ export function UploadArea() {
     if (!fileDetails || !isValidFile) return;
     
     try {
+      // First check if user has enough credits (if authenticated)
+      if (isAuthenticated) {
+        const creditCheckResponse = await axios.get('/api/credits');
+        if (creditCheckResponse.data.credits < 1) {
+          setProcessingError('Not enough credits');
+          return;
+        }
+      }
+      
       setIsProcessing(true);
       setProcessingError(null);
       setExtractedStems(null);
