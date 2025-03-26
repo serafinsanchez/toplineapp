@@ -303,118 +303,160 @@ export function UploadArea() {
     // Set loading state
     setIsValidFile(null);
     
-    // File size threshold for using Supabase storage (4MB = 4 * 1024 * 1024 bytes)
+    // File size threshold for using different upload methods
     const fileSizeThreshold = 4 * 1024 * 1024; // 4MB
     
-    // For smaller files, use the existing API upload method
+    // For smaller files, use the standard API upload endpoint
     if (file.size <= fileSizeThreshold) {
-      // Create a FormData object to upload the file
-      const formData = new FormData();
-      formData.append('file', file);
-      
-      // Upload the file to get the file path
-      axios.post('/api/upload', formData)
-        .then(response => {
-          if (response.data.success) {
-            setFileDetails({
-              name: file.name,
-              size: file.size,
-              type: file.type,
-              path: response.data.filePath,
-              isSupabaseStorage: false
-            });
-            setIsValidFile(true);
-            
-            // Only check free trial for non-authenticated users
-            if (!isAuthenticated) {
-              // Check if free trial has been used
-              axios.get('/api/free-trial/check')
-                .then(freeTrialResponse => {
-                  setFreeTrialUsed(freeTrialResponse.data.used === true);
-                })
-                .catch(error => {
-                  console.error('Error checking free trial status:', error);
-                });
-            } else {
-              // For authenticated users, assume they can use their credits
-              setFreeTrialUsed(false);
-            }
-          } else {
-            setDropError(response.data.error || 'Failed to upload file');
-            setIsValidFile(false);
-          }
-        })
-        .catch(error => {
-          console.error('Error uploading file:', error);
-          setDropError(error.response?.data?.error || error.message || 'Failed to upload file');
-          setIsValidFile(false);
-        });
+      handleSmallFileUpload(file);
     } else {
-      // For larger files, use the server-side API that bypasses RLS
-      // Create a FormData object to upload the file
-      const formData = new FormData();
-      formData.append('file', file);
-      
-      // Show loading state while uploading
-      setIsValidFile(null);
-      
-      // Upload using server-side endpoint that uses admin privileges
-      axios.post('/api/upload-large', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        },
-        onUploadProgress: (progressEvent) => {
-          console.log(`Upload progress: ${Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1))}%`);
+      // For larger files, use appropriate method based on auth state
+      if (isAuthenticated) {
+        handleAuthenticatedLargeFileUpload(file);
+      } else {
+        handleUnauthenticatedLargeFileUpload(file);
+      }
+    }
+  };
+
+  // Handle small file uploads via the normal API endpoint
+  const handleSmallFileUpload = (file: File) => {
+    // Create a FormData object to upload the file
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    // Upload the file to get the file path
+    axios.post('/api/upload', formData)
+      .then(response => {
+        if (response.data.success) {
+          setFileDetails({
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            path: response.data.filePath,
+            isSupabaseStorage: false
+          });
+          setIsValidFile(true);
+          
+          // Check free trial status for non-authenticated users
+          if (!isAuthenticated) {
+            checkFreeTrialStatus();
+          } else {
+            setFreeTrialUsed(false);
+          }
+        } else {
+          setDropError(response.data.error || 'Failed to upload file');
+          setIsValidFile(false);
         }
       })
-        .then(response => {
-          if (response.data.success) {
-            setFileDetails({
-              name: file.name,
-              size: file.size,
-              type: file.type,
-              path: response.data.filePath,
-              url: response.data.url,
-              isSupabaseStorage: true
-            });
-            setIsValidFile(true);
-            
-            // Only check free trial for non-authenticated users
-            if (!isAuthenticated) {
-              // Check if free trial has been used
-              axios.get('/api/free-trial/check')
-                .then(freeTrialResponse => {
-                  setFreeTrialUsed(freeTrialResponse.data.used === true);
-                })
-                .catch(error => {
-                  console.error('Error checking free trial status:', error);
-                });
-            } else {
-              // For authenticated users, assume they can use their credits
-              setFreeTrialUsed(false);
-            }
-          } else {
-            console.error('Failed to upload large file:', response.data.error);
-            // Handle 413 Payload Too Large error specifically
-            if (response.data.status === 413) {
-              setDropError('The file size is too large for upload. Please try a smaller file (under 25MB).');
-            } else {
-              setDropError(response.data.error || 'Failed to upload file. Please try again.');
-            }
-            setIsValidFile(false);
+      .catch(error => {
+        console.error('Error uploading file:', error);
+        setDropError(error.response?.data?.error || error.message || 'Failed to upload file');
+        setIsValidFile(false);
+      });
+  };
+
+  // Handle large file uploads for authenticated users
+  const handleAuthenticatedLargeFileUpload = (file: File) => {
+    console.log("User authenticated, using Supabase client directly");
+    
+    // Use the Supabase client to upload the file directly
+    uploadFileToStorage(file, 'uploads')
+      .then(result => {
+        if (result.success && result.url && result.path) {
+          setFileDetails({
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            path: result.path,
+            url: result.url,
+            isSupabaseStorage: true
+          });
+          setIsValidFile(true);
+          setFreeTrialUsed(false); // Authenticated users use credits, not free trial
+        } else {
+          throw new Error(result.error?.message || 'Failed to upload file to storage');
+        }
+      })
+      .catch(error => {
+        console.error('Error uploading to Supabase:', error);
+        setDropError(error.message || 'Failed to upload file. Please try again.');
+        setIsValidFile(false);
+      });
+  };
+
+  // Handle large file uploads for unauthenticated users
+  const handleUnauthenticatedLargeFileUpload = (file: File) => {
+    console.log("User not authenticated, using token-based upload");
+    
+    // Step 1: Get a token for the upload
+    axios.get(`/api/upload-token?filename=${encodeURIComponent(file.name)}&fileType=${encodeURIComponent(file.type)}`)
+      .then(tokenResponse => {
+        if (!tokenResponse.data.success) {
+          throw new Error(tokenResponse.data.error || "Failed to get upload token");
+        }
+        
+        const { uploadUrl, path, uploadId } = tokenResponse.data;
+        
+        // Step 2: Create a FormData for the direct upload
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        // Step 3: Upload directly to Supabase storage
+        return axios.post(uploadUrl, formData, {
+          onUploadProgress: (progressEvent) => {
+            console.log(`Upload progress: ${Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1))}%`);
           }
         })
-        .catch(error => {
-          console.error('Error uploading large file:', error);
-          // Handle 413 Payload Too Large error specifically
-          if (error.response && error.response.status === 413) {
-            setDropError('The file size is too large for upload. Please try a smaller file (under 25MB).');
-          } else {
-            setDropError(error.response?.data?.error || 'Failed to upload file. Please try again.');
-          }
-          setIsValidFile(false);
+        .then(() => {
+          // Step 4: Notify our backend the upload is complete to get the URL
+          return axios.post('/api/upload-complete', {
+            filename: file.name,
+            uploadId: uploadId
+          });
         });
-    }
+      })
+      .then(response => {
+        if (response?.data?.success) {
+          setFileDetails({
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            path: response.data.filePath,
+            url: response.data.url,
+            isSupabaseStorage: true
+          });
+          setIsValidFile(true);
+          
+          // Check free trial status
+          checkFreeTrialStatus();
+        } else {
+          throw new Error(response?.data?.error || "Upload failed");
+        }
+      })
+      .catch(error => {
+        console.error('Error uploading file:', error);
+        
+        // Handle specific error cases
+        if (error.response && error.response.status === 413) {
+          setDropError('The file size is too large for upload. Please try a smaller file (under 25MB) or sign in to upload larger files.');
+        } else {
+          setDropError(error.message || 'Failed to upload file. Please try again.');
+        }
+        
+        setIsValidFile(false);
+      });
+  };
+
+  // Helper to check free trial status
+  const checkFreeTrialStatus = () => {
+    axios.get('/api/free-trial/check')
+      .then(freeTrialResponse => {
+        setFreeTrialUsed(freeTrialResponse.data.used === true);
+      })
+      .catch(error => {
+        console.error('Error checking free trial status:', error);
+      });
   };
 
   // Add global drag event listeners
