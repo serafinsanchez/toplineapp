@@ -5,6 +5,11 @@ import { v4 as uuidv4 } from 'uuid';
 // Maximum file size - 25MB should be enough for audio files
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
 
+// Configure larger limit at the route level
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
   try {
     // Get form data with the file

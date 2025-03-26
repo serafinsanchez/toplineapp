@@ -6,6 +6,13 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   // Support for large file uploads
+  experimental: {
+    serverComponentsExternalPackages: ['sharp'],
+    serverActions: {
+      bodySizeLimit: '26mb',
+    },
+  },
+  // Properly configure API routes (for pages/api routes)
   api: {
     bodyParser: {
       sizeLimit: '26mb'

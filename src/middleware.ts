@@ -18,6 +18,11 @@ const authPaths = [
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   
+  // Skip middleware for API routes that handle uploads
+  if (pathname.startsWith('/api/upload-large')) {
+    return NextResponse.next();
+  }
+  
   // Check if the path is protected
   const isProtectedPath = protectedPaths.some(path => 
     pathname.startsWith(path)
