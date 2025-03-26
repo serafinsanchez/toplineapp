@@ -12,7 +12,7 @@ let stripeInstance: Stripe | null = null;
 export const getStripe = () => {
   if (!stripeInstance && typeof process !== 'undefined' && process.env.STRIPE_SECRET_KEY) {
     stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2023-10-16', // Use the latest API version
+      apiVersion: '2025-02-24.acacia', // Use the latest API version
     });
   }
   return stripeInstance;
