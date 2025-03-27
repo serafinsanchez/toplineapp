@@ -1,7 +1,7 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { AuroraBackground } from "@/components/ui/aurora-background";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,25 @@ interface Transaction {
   stripe_transaction_id: string | null;
 }
 
+// Create a separate component for handling search params
+function PaymentStatus({ onSuccess }: { onSuccess: () => void }) {
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const success = searchParams.get('success');
+    const canceled = searchParams.get('canceled');
+    
+    if (success === 'true') {
+      toast.success('Payment successful! Credits have been added to your account.');
+      onSuccess();
+    } else if (canceled === 'true') {
+      toast.error('Payment canceled. No credits were added to your account.');
+    }
+  }, [searchParams, onSuccess]);
+
+  return null;
+}
+
 export default function CreditsPage() {
   const { data: session } = useSession();
   const [loading, setLoading] = useState(false);
@@ -32,7 +51,6 @@ export default function CreditsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const searchParams = useSearchParams();
 
   useEffect(() => {
     if (session?.user) {
@@ -42,20 +60,6 @@ export default function CreditsPage() {
       setIsLoading(false);
     }
   }, [session]);
-
-  useEffect(() => {
-    // Check for success/canceled payment
-    const success = searchParams.get('success');
-    const canceled = searchParams.get('canceled');
-    
-    if (success === 'true') {
-      toast.success('Payment successful! Credits have been added to your account.');
-      // Refresh credits and transactions after successful payment
-      refreshData();
-    } else if (canceled === 'true') {
-      toast.error('Payment canceled. No credits were added to your account.');
-    }
-  }, [searchParams]);
 
   const fetchUserCredits = async () => {
     try {
@@ -159,6 +163,9 @@ export default function CreditsPage() {
 
   return (
     <AuroraBackground>
+      <Suspense fallback={null}>
+        <PaymentStatus onSuccess={refreshData} />
+      </Suspense>
       <div className="container mx-auto py-12 px-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -198,75 +205,67 @@ export default function CreditsPage() {
           <div className="bg-black/20 backdrop-blur-xl rounded-xl border border-white/10 p-6 mb-8">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-medium">Your Balance</h2>
-                <p className="text-muted-foreground">
-                  You have credits to process more files
-                </p>
-              </div>
-              <div className="text-4xl font-bold">
+                <h2 className="text-xl font-medium mb-1">Current Balance</h2>
                 {isLoading ? (
-                  <span className="text-muted-foreground text-2xl">Loading...</span>
+                  <div className="h-8 w-24 bg-white/10 animate-pulse rounded" />
                 ) : (
-                  creditBalance === null ? "Error" : creditBalance
+                  <p className="text-3xl font-bold">
+                    {creditBalance !== null ? creditBalance : '0'} credits
+                  </p>
                 )}
               </div>
+              <Button
+                onClick={handlePurchase}
+                disabled={loading || !session?.user}
+                className="relative z-50"
+              >
+                {loading ? (
+                  <>
+                    <ReloadIcon className="mr-2 h-4 w-4 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    Buy {CREDIT_PACKAGE.credits} Credits for ${CREDIT_PACKAGE.price}
+                  </>
+                )}
+              </Button>
             </div>
           </div>
 
-          <h2 className="text-2xl font-semibold mb-6">Purchase Credits</h2>
-
-          <div className="bg-black/20 backdrop-blur-xl rounded-xl border border-white/10 p-8 flex flex-col items-center justify-center max-w-md mx-auto mb-8">
-            <h3 className="text-2xl font-semibold mb-2">{CREDIT_PACKAGE.name}</h3>
-            <div className="text-4xl font-bold mb-3">${CREDIT_PACKAGE.price.toFixed(2)}</div>
-            <p className="text-muted-foreground mb-6">Get {CREDIT_PACKAGE.credits} credits</p>
-            <Button
-              className="w-full"
-              size="lg"
-              onClick={handlePurchase}
-              disabled={loading || !session?.user}
-            >
-              {loading ? "Processing..." : "Purchase Credits"}
-            </Button>
-            {!session?.user && (
-              <p className="text-sm text-muted-foreground mt-4">Please sign in to purchase credits</p>
+          <div className="bg-black/20 backdrop-blur-xl rounded-xl border border-white/10 p-6">
+            <h2 className="text-xl font-medium mb-4">Transaction History</h2>
+            {!session?.user ? (
+              <p className="text-muted-foreground">
+                Please sign in to view your transaction history
+              </p>
+            ) : transactions.length === 0 ? (
+              <p className="text-muted-foreground">No transactions yet</p>
+            ) : (
+              <div className="space-y-4">
+                {transactions.map((transaction) => (
+                  <div
+                    key={transaction.id}
+                    className="flex items-center justify-between p-4 rounded-lg bg-white/5"
+                  >
+                    <div>
+                      <p className="font-medium">
+                        {transaction.type === 'purchase' ? 'Credits Purchased' : 'Credits Used'}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {formatDate(transaction.created_at)}
+                      </p>
+                    </div>
+                    <p className={`text-lg font-medium ${
+                      transaction.type === 'purchase' ? 'text-green-400' : 'text-red-400'
+                    }`}>
+                      {transaction.type === 'purchase' ? '+' : ''}{transaction.amount}
+                    </p>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
-
-          {transactions.length > 0 && (
-            <div className="mt-12">
-              <h2 className="text-2xl font-semibold mb-6">Transaction History</h2>
-              <div className="bg-black/20 backdrop-blur-xl rounded-xl border border-white/10 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-white/10">
-                        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Date</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Type</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Amount</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Transaction ID</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {transactions.map((transaction) => (
-                        <tr key={transaction.id} className="border-b border-white/5 hover:bg-white/5">
-                          <td className="px-6 py-4 whitespace-nowrap">{formatDate(transaction.created_at)}</td>
-                          <td className="px-6 py-4 whitespace-nowrap capitalize">{transaction.type}</td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={transaction.amount > 0 ? "text-green-400" : "text-red-400"}>
-                              {transaction.amount > 0 ? "+" : ""}{transaction.amount}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-xs text-muted-foreground">
-                            {transaction.stripe_transaction_id ? transaction.stripe_transaction_id.substring(0, 10) + "..." : "N/A"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
         </motion.div>
       </div>
     </AuroraBackground>

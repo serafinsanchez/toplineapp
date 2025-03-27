@@ -40,37 +40,39 @@ export async function POST(request: NextRequest) {
   try {
     // Get the request body
     const body = await request.json();
-    const { filePath, bypassToken, authenticated, sessionStatus, userId: clientSideUserId } = body;
+    const { filePath, url, bypassToken, authenticated, sessionStatus, userId: clientSideUserId } = body;
 
-    console.log(`Received request for file path: ${filePath?.substring(0, 50)}...`);
+    console.log(`Received request with filePath: ${filePath?.substring(0, 50)}... and url: ${url?.substring(0, 50)}...`);
 
-    if (!filePath) {
+    if (!filePath && !url) {
       return NextResponse.json(
-        { success: false, error: 'Missing file path' },
+        { success: false, error: 'Missing file path or URL' },
         { status: 400 }
       );
     }
 
-    // Fix file path for Vercel environment
-    const fixedFilePath = fixFilePath(filePath);
-    console.log(`Original file path: ${filePath}`);
-    console.log(`Fixed file path: ${fixedFilePath}`);
+    // If we have a URL, we'll use that directly for processing
+    // If we have a file path, we'll need to fix it for Vercel environment
+    const fileToProcess = url || fixFilePath(filePath);
+    console.log(`File to process: ${fileToProcess}`);
 
-    // Check if the file exists
-    if (!fs.existsSync(fixedFilePath)) {
-      console.error(`File not found at path: ${fixedFilePath}`);
+    // Only check file existence if we're using a file path (not a URL)
+    if (!url && !fs.existsSync(fileToProcess)) {
+      console.error(`File not found at path: ${fileToProcess}`);
       return NextResponse.json(
         { success: false, error: 'File not found' },
         { status: 404 }
       );
     }
 
-    // Log file size
-    try {
-      const stats = fs.statSync(fixedFilePath);
-      console.log(`File size: ${stats.size} bytes (${Math.round(stats.size / 1024 / 1024 * 100) / 100} MB)`);
-    } catch (statError) {
-      console.error('Error checking file size:', statError);
+    // Log file size only if we're using a file path
+    if (!url) {
+      try {
+        const stats = fs.statSync(fileToProcess);
+        console.log(`File size: ${stats.size} bytes (${Math.round(stats.size / 1024 / 1024 * 100) / 100} MB)`);
+      } catch (statError) {
+        console.error('Error checking file size:', statError);
+      }
     }
 
     // Get the user session
@@ -112,9 +114,8 @@ export async function POST(request: NextRequest) {
     const processId = uuidv4();
 
     try {
-      // Start the upload process (but don't wait for it to complete)
-      // We'll just verify that the API is reachable
-      const downloadUrl = await uploadFile(fixedFilePath);
+      // If we have a URL, use it directly, otherwise upload the file
+      const downloadUrl = url || await uploadFile(fileToProcess);
       
       // Create a job in MusicAI
       const jobId = await createJob(downloadUrl);
@@ -145,8 +146,8 @@ export async function POST(request: NextRequest) {
       
       // Clean up the original uploaded file since it's no longer needed
       try {
-        await cleanupFiles([fixedFilePath]);
-        console.log(`Cleaned up original uploaded file: ${fixedFilePath}`);
+        await cleanupFiles([fileToProcess]);
+        console.log(`Cleaned up original uploaded file: ${fileToProcess}`);
       } catch (cleanupError) {
         console.warn('Failed to clean up original uploaded file:', cleanupError);
         // Continue despite cleanup errors

@@ -9,12 +9,10 @@ const nextConfig = {
   experimental: {
     serverActions: {
       bodySizeLimit: '26mb',
-    },
+    }
   },
   // External packages for server components
-  serverExternalPackages: ['sharp'],
-  // Response size limit
-  responseLimit: '26mb'
+  serverExternalPackages: ['sharp']
 }
 
 module.exports = nextConfig 

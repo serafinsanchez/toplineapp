@@ -14,7 +14,6 @@ import { SparklesCore } from "@/components/ui/sparkles";
 import { ProcessingStatus } from "./ProcessingStatus";
 import { useSession } from "next-auth/react";
 import { CREDIT_REFRESH_EVENT } from "@/components/layout/Header";
-import { uploadFileToStorage } from "@/lib/supabase";
 import { uploadLargeFileToSupabase } from "@/lib/upload-helpers";
 
 export function UploadArea() {
@@ -62,12 +61,15 @@ export function UploadArea() {
       
       // Send the file URL or path
       let processRequest;
-      if (fileDetails.url) {
+      if (fileDetails.isSupabaseStorage && fileDetails.url) {
+        console.log(`Using Supabase URL for processing: ${fileDetails.url.substring(0, 50)}...`);
+        processRequest = { url: fileDetails.url };
+      } else if (fileDetails.url) {
         console.log(`Using URL for processing: ${fileDetails.url.substring(0, 50)}...`);
         processRequest = { url: fileDetails.url };
       } else {
         console.log(`Using file path for processing: ${fileDetails.path}`);
-        processRequest = { url: fileDetails.path };
+        processRequest = { filePath: fileDetails.path };
       }
       
       console.log("Starting processing job with request:", processRequest);

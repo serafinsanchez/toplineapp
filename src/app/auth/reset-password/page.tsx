@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AuroraBackground } from "@/components/ui/aurora-background";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,8 @@ import { Lock } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
-export default function ResetPassword() {
+// Create a separate component for handling search params
+function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -83,76 +84,84 @@ export default function ResetPassword() {
   };
 
   return (
-    <AuroraBackground>
-      <div className="min-h-screen w-full flex flex-col items-center justify-center">
-        <div className="w-full max-w-md p-8 space-y-8 bg-black/20 backdrop-blur-xl rounded-xl border border-white/10">
+    <div className="w-full max-w-md p-8 space-y-8 bg-black/20 backdrop-blur-xl rounded-xl border border-white/10">
+      <div className="text-center">
+        <h1 className="text-3xl font-bold tracking-tight">Reset Password</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Enter your new password below
+        </p>
+      </div>
+
+      {isError ? (
+        <div className="space-y-6">
+          <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 text-center">
+            <p className="text-white">{message}</p>
+          </div>
           <div className="text-center">
-            <h1 className="text-3xl font-bold tracking-tight">Reset Password</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Enter your new password below
-            </p>
+            <Link href="/auth/forgot-password" className="text-sm text-primary hover:underline">
+              Request a new password reset link
+            </Link>
+          </div>
+        </div>
+      ) : isSuccess ? (
+        <div className="space-y-6">
+          <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 text-center">
+            <p className="text-white">{message}</p>
+            <p className="text-white mt-2">Redirecting to sign in page...</p>
+          </div>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="password">New Password</Label>
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+              minLength={8}
+            />
           </div>
 
-          {isError ? (
-            <div className="space-y-6">
-              <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 text-center">
-                <p className="text-white">{message}</p>
-              </div>
-              <div className="text-center">
-                <Link href="/auth/forgot-password" className="text-sm text-primary hover:underline">
-                  Request a new password reset link
-                </Link>
-              </div>
-            </div>
-          ) : isSuccess ? (
-            <div className="space-y-6">
-              <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 text-center">
-                <p className="text-white">{message}</p>
-                <p className="text-white mt-2">Redirecting to sign in page...</p>
-              </div>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="password">New Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  minLength={8}
-                />
-              </div>
+          <div className="space-y-2">
+            <Label htmlFor="confirmPassword">Confirm Password</Label>
+            <Input
+              id="confirmPassword"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+              minLength={8}
+            />
+          </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm Password</Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  minLength={8}
-                />
-              </div>
-
-              {message && (
-                <div className="text-red-500 text-sm font-medium">{message}</div>
-              )}
-
-              <Button
-                type="submit"
-                className="w-full gap-2"
-                disabled={isLoading}
-              >
-                {isLoading ? "Resetting..." : "Reset Password"} <Lock className="w-4 h-4" />
-              </Button>
-            </form>
+          {message && (
+            <div className="text-red-500 text-sm font-medium">{message}</div>
           )}
-        </div>
+
+          <Button
+            type="submit"
+            className="w-full gap-2"
+            disabled={isLoading}
+          >
+            {isLoading ? "Resetting..." : "Reset Password"} <Lock className="w-4 h-4" />
+          </Button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+export default function ResetPassword() {
+  return (
+    <AuroraBackground>
+      <div className="min-h-screen w-full flex flex-col items-center justify-center">
+        <Suspense fallback={null}>
+          <ResetPasswordForm />
+        </Suspense>
       </div>
     </AuroraBackground>
   );

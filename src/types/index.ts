@@ -45,6 +45,8 @@ export interface FileDetails {
   size: number;
   type: string;
   path?: string;
+  url?: string;
+  isSupabaseStorage?: boolean;
 }
 
 // Audio file type
