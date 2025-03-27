@@ -9,24 +9,6 @@ import { useRouter } from "next/navigation";
 export default function Home() {
   const router = useRouter();
   
-  const footerLinks = [
-    {
-      text: "How It Works",
-      href: "#",
-      icon: "/file.svg"
-    },
-    {
-      text: "Examples",
-      href: "#",
-      icon: "/window.svg"
-    },
-    {
-      text: "About Topline",
-      href: "#",
-      icon: "/globe.svg"
-    }
-  ];
-
   return (
     <div className="min-h-screen w-full flex flex-col">
       <div className="flex-1 relative">
@@ -65,23 +47,6 @@ export default function Home() {
           </ShimmerButton>
         </motion.div>
       </div>
-      
-      <motion.footer 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 1.4, duration: 0.8 }}
-        className="w-full py-8 flex gap-[24px] flex-wrap items-center justify-center text-sm"
-      >
-        {footerLinks.map((link, index) => (
-          <FooterLink 
-            key={index}
-            href={link.href}
-            icon={link.icon}
-          >
-            {link.text}
-          </FooterLink>
-        ))}
-      </motion.footer>
     </div>
   );
 }

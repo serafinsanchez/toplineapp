@@ -4,9 +4,9 @@ import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { authOptions } from '@/lib/auth';
-import { getUserCredits } from '@/lib/supabase';
+import { getUserCredits, createServiceRoleClient } from '@/lib/supabase';
 import { hasUsedFreeTrial, recordFreeTrial } from '@/lib/free-trial';
-import { uploadFile, createJob } from '@/lib/audio-processor';
+import { uploadFile, createJob, cleanupFiles } from '@/lib/audio-processor';
 
 // Special bypass token for testing
 const BYPASS_TOKEN = 'topline-dev-testing-bypass';
@@ -31,21 +31,6 @@ const fixFilePath = (filePath: string): string => {
   }
   return filePath;
 };
-
-// Track processing jobs
-interface ProcessingJob {
-  jobId: string;
-  filePath: string;
-  userId: string | null;
-  status: 'CREATED' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
-  error?: string;
-  acapellaPath?: string;
-  instrumentalPath?: string;
-  createdAt: Date;
-}
-
-// In-memory storage for jobs (in real production, use a database)
-const processingJobs = new Map<string, ProcessingJob>();
 
 export async function POST(request: NextRequest) {
   // Track elapsed time
@@ -134,22 +119,38 @@ export async function POST(request: NextRequest) {
       // Create a job in MusicAI
       const jobId = await createJob(downloadUrl);
       
-      // Store the job for status checking
-      processingJobs.set(processId, {
-        jobId,
-        filePath: fixedFilePath,
-        userId,
-        status: 'PROCESSING',
-        createdAt: new Date()
-      });
-      
       // Create a job-specific output directory
       const outputDir = path.join(RESULTS_DIR, jobId);
       if (!fs.existsSync(outputDir)) {
         fs.mkdirSync(outputDir, { recursive: true });
       }
+
+      // Store the job in Supabase
+      const supabaseAdmin = createServiceRoleClient();
+      const { error: insertError } = await supabaseAdmin
+        .from('processing_jobs')
+        .insert({
+          process_id: processId,
+          job_id: jobId,
+          user_id: userId,
+          status: 'PROCESSING'
+        });
+
+      if (insertError) {
+        console.error('Error inserting job into database:', insertError);
+        throw new Error('Failed to store job information');
+      }
       
       console.log(`Job started with process ID: ${processId}, MusicAI job ID: ${jobId}`);
+      
+      // Clean up the original uploaded file since it's no longer needed
+      try {
+        await cleanupFiles([fixedFilePath]);
+        console.log(`Cleaned up original uploaded file: ${fixedFilePath}`);
+      } catch (cleanupError) {
+        console.warn('Failed to clean up original uploaded file:', cleanupError);
+        // Continue despite cleanup errors
+      }
       
       // Return immediately with the process ID
       return NextResponse.json({
@@ -160,15 +161,17 @@ export async function POST(request: NextRequest) {
     } catch (error: any) {
       console.error('Error starting processing:', error);
       
-      // Store the failed job
-      processingJobs.set(processId, {
-        jobId: 'failed',
-        filePath: fixedFilePath,
-        userId,
-        status: 'FAILED',
-        error: error.message,
-        createdAt: new Date()
-      });
+      // Store the failed job in Supabase
+      const supabaseAdmin = createServiceRoleClient();
+      await supabaseAdmin
+        .from('processing_jobs')
+        .insert({
+          process_id: processId,
+          job_id: 'failed',
+          user_id: userId,
+          status: 'FAILED',
+          error: error.message
+        });
       
       return NextResponse.json(
         { success: false, error: 'Failed to start processing' },
@@ -183,9 +186,6 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
-// Export for use in other routes
-export { processingJobs };
 
 // Set the maximum request body size and timeout
 export const config = {

@@ -138,12 +138,12 @@ export function UploadArea() {
             // Create object URLs for the audio files
             const acapellaBlob = base64ToBlob(
               statusData.acapella.data, 
-              acapellaType
+              'audio/mp3'
             );
             
             const instrumentalBlob = base64ToBlob(
               statusData.instrumental.data, 
-              instrumentalType
+              'audio/mp3'
             );
             
             // Update the extracted stems with URLs and custom file names
@@ -152,14 +152,14 @@ export function UploadArea() {
               acapella: {
                 data: typeof statusData.acapella.data === 'string' ? statusData.acapella.data : '',
                 url: URL.createObjectURL(acapellaBlob),
-                name: `${fileNameWithoutExt}_acapella.wav`,
-                type: acapellaType
+                name: `${fileNameWithoutExt}_acapella.mp3`,
+                type: 'audio/mp3'
               },
               instrumental: {
                 data: typeof statusData.instrumental.data === 'string' ? statusData.instrumental.data : '',
                 url: URL.createObjectURL(instrumentalBlob),
-                name: `${fileNameWithoutExt}_instrumental.wav`,
-                type: instrumentalType
+                name: `${fileNameWithoutExt}_instrumental.mp3`,
+                type: 'audio/mp3'
               }
             });
             

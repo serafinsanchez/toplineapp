@@ -11,6 +11,18 @@ interface ExtractedStemsDisplayProps {
 export function ExtractedStemsDisplay({ extractedStems }: ExtractedStemsDisplayProps) {
   if (!extractedStems) return null;
   
+  const downloadFile = (data: string, filename: string, type: string) => {
+    const blob = base64ToBlob(data, type);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename.endsWith('.mp3') ? filename : `${filename}.mp3`;  // Ensure MP3 extension
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
