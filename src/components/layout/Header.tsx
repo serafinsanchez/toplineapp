@@ -11,7 +11,8 @@ import { useRouter } from "next/navigation";
 export const CREDIT_REFRESH_EVENT = 'refresh-user-credits';
 
 export function Header() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
+  const isAuthenticated = status === "authenticated";
   const [credits, setCredits] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
@@ -75,10 +76,6 @@ export function Header() {
     router.push("/");
   };
 
-  if (!session) {
-    return null;
-  }
-
   const navItems = [
     {
       name: "Home",
@@ -90,16 +87,13 @@ export function Header() {
       url: "/upload",
       icon: Upload,
     },
-    {
-      name: "Dashboard",
-      url: "/dashboard",
-      icon: LayoutDashboard,
-    },
-    {
-      name: "Credits",
-      url: "/credits",
-      icon: CreditCard,
-    },
+    ...(isAuthenticated ? [
+      {
+        name: "Credits",
+        url: "/credits",
+        icon: CreditCard,
+      }
+    ] : [])
   ];
 
   return (
@@ -109,26 +103,46 @@ export function Header() {
       <NavBar items={navItems} />
       
       <div className="flex-1 flex justify-end items-center gap-4">
-        <div className="bg-muted/30 px-4 py-2 rounded-full">
-          <span className="text-sm font-medium">
-            {isLoading ? '...' : `${credits} credits`}
-          </span>
-        </div>
-        
-        <div className="bg-muted/30 px-4 py-2 rounded-full">
-          <span className="text-sm font-medium">
-            {session.user.name || session.user.email}
-          </span>
-        </div>
-        
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          onClick={handleLogout}
-          className="rounded-full hover:bg-destructive/10 hover:text-destructive"
-        >
-          <LogOut size={18} />
-        </Button>
+        {isAuthenticated ? (
+          <>
+            <div className="bg-muted/30 px-4 py-2 rounded-full">
+              <span className="text-sm font-medium">
+                {isLoading ? '...' : `${credits} credits`}
+              </span>
+            </div>
+            
+            <div className="bg-muted/30 px-4 py-2 rounded-full">
+              <span className="text-sm font-medium">
+                {session.user.name || session.user.email}
+              </span>
+            </div>
+            
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={handleLogout}
+              className="rounded-full hover:bg-destructive/10 hover:text-destructive"
+            >
+              <LogOut size={18} />
+            </Button>
+          </>
+        ) : (
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => router.push('/auth/signin')}
+              className="px-4"
+            >
+              Sign In
+            </Button>
+            <Button 
+              onClick={() => router.push('/auth/signup')}
+              className="px-4 bg-primary hover:bg-primary/90"
+            >
+              Sign Up
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );
