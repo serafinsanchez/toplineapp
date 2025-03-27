@@ -2,7 +2,7 @@ import Stripe from 'stripe';
 
 // Credit package options
 export const CREDIT_PACKAGES = [
-  { id: 'standard', name: 'Credits Package', credits: 10, price: 999 }, // $9.99
+  { id: 'standard', name: 'Credit', credits: 1, price: 100 }, // $1.00 (in cents)
 ];
 
 // Server-side Stripe client
@@ -33,7 +33,8 @@ export async function createCheckoutSession(
   userId: string,
   packageId: string,
   successUrl: string,
-  cancelUrl: string
+  cancelUrl: string,
+  quantity: number = 1
 ) {
   // Find the selected credit package
   const creditPackage = CREDIT_PACKAGES.find((pkg) => pkg.id === packageId);
@@ -55,12 +56,12 @@ export async function createCheckoutSession(
         price_data: {
           currency: 'usd',
           product_data: {
-            name: creditPackage.name,
-            description: `${creditPackage.credits} credits for Topline`,
+            name: quantity === 1 ? creditPackage.name : `${creditPackage.name}s`,
+            description: `${quantity} ${quantity === 1 ? 'credit' : 'credits'} for Topline`,
           },
           unit_amount: creditPackage.price,
         },
-        quantity: 1,
+        quantity: quantity,
       },
     ],
     mode: 'payment',
@@ -69,7 +70,7 @@ export async function createCheckoutSession(
     metadata: {
       userId,
       packageId,
-      credits: creditPackage.credits.toString(),
+      credits: (creditPackage.credits * quantity).toString(),
     },
   });
 

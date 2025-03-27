@@ -12,9 +12,9 @@ import { ReloadIcon } from "@radix-ui/react-icons";
 // Define single credit package
 const CREDIT_PACKAGE = {
   id: 'standard',
-  name: 'Credits Package',
-  credits: 10,
-  price: 9.99
+  name: 'Credit',
+  credits: 1,
+  price: 1.00
 };
 
 interface Transaction {
@@ -51,6 +51,7 @@ export default function CreditsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [quantity, setQuantity] = useState(1);
 
   useEffect(() => {
     if (session?.user) {
@@ -131,13 +132,16 @@ export default function CreditsPage() {
     setLoading(true);
     
     try {
-      // Call the purchase API with package ID
+      // Call the purchase API with package ID and quantity
       const response = await fetch('/api/credits/purchase', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ packageId: CREDIT_PACKAGE.id }),
+        body: JSON.stringify({ 
+          packageId: CREDIT_PACKAGE.id,
+          quantity: quantity 
+        }),
       });
 
       const data = await response.json();
@@ -214,22 +218,43 @@ export default function CreditsPage() {
                   </p>
                 )}
               </div>
-              <Button
-                onClick={handlePurchase}
-                disabled={loading || !session?.user}
-                className="relative z-50"
-              >
-                {loading ? (
-                  <>
-                    <ReloadIcon className="mr-2 h-4 w-4 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    Buy {CREDIT_PACKAGE.credits} Credits for ${CREDIT_PACKAGE.price}
-                  </>
-                )}
-              </Button>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                    className="h-8 w-8"
+                  >
+                    -
+                  </Button>
+                  <span className="w-12 text-center">{quantity}</span>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setQuantity(quantity + 1)}
+                    className="h-8 w-8"
+                  >
+                    +
+                  </Button>
+                </div>
+                <Button
+                  onClick={handlePurchase}
+                  disabled={loading || !session?.user}
+                  className="relative z-50"
+                >
+                  {loading ? (
+                    <>
+                      <ReloadIcon className="mr-2 h-4 w-4 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      Buy {quantity} {quantity === 1 ? 'Credit' : 'Credits'} for ${(quantity * CREDIT_PACKAGE.price).toFixed(2)}
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -256,9 +281,7 @@ export default function CreditsPage() {
                         {formatDate(transaction.created_at)}
                       </p>
                     </div>
-                    <p className={`text-lg font-medium ${
-                      transaction.type === 'purchase' ? 'text-green-400' : 'text-red-400'
-                    }`}>
+                    <p className="text-lg font-medium">
                       {transaction.type === 'purchase' ? '+' : ''}{transaction.amount}
                     </p>
                   </div>

@@ -12,10 +12,14 @@ export async function POST(request: NextRequest) {
     }
     
     const userId = session.user.id;
-    const { packageId } = await request.json();
+    const { packageId, quantity = 1 } = await request.json();
     
     if (!packageId) {
       return NextResponse.json({ error: 'Package ID is required' }, { status: 400 });
+    }
+
+    if (quantity < 1) {
+      return NextResponse.json({ error: 'Quantity must be at least 1' }, { status: 400 });
     }
     
     // Validate the package ID
@@ -30,7 +34,8 @@ export async function POST(request: NextRequest) {
         userId,
         packageId,
         `${process.env.NEXTAUTH_URL}/credits`,
-        `${process.env.NEXTAUTH_URL}/credits?canceled=true`
+        `${process.env.NEXTAUTH_URL}/credits?canceled=true`,
+        quantity
       );
       
       return NextResponse.json({ 
