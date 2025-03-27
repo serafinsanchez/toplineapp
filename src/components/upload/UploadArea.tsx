@@ -15,6 +15,7 @@ import { ProcessingStatus } from "./ProcessingStatus";
 import { useSession } from "next-auth/react";
 import { CREDIT_REFRESH_EVENT } from "@/components/layout/Header";
 import { uploadLargeFileToSupabase } from "@/lib/upload-helpers";
+import { UploadProgress } from "./UploadProgress";
 
 export function UploadArea() {
   const [fileDetails, setFileDetails] = useState<FileDetails | null>(null);
@@ -26,10 +27,29 @@ export function UploadArea() {
   const [processingError, setProcessingError] = useState<string | null>(null);
   const [extractedStems, setExtractedStems] = useState<StemExtractionResult | null>(null);
   const [freeTrialUsed, setFreeTrialUsed] = useState<boolean>(false);
+  const [uploadPhase, setUploadPhase] = useState<'uploading' | 'verifying' | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
   const dropzoneRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { data: session, status } = useSession();
   const isAuthenticated = status === "authenticated";
+
+  // Add type interface for upload result
+  interface UploadResult {
+    success: boolean;
+    url?: string;
+    filePath?: string;
+    error?: {
+      message: string;
+    };
+  }
+
+  // Add type interface for verification result
+  interface VerificationResult {
+    success: boolean;
+    filePath: string;
+    url: string;
+  }
 
   // Handle the "Get Stems" button click
   const handleGetStems = async () => {
@@ -322,88 +342,126 @@ export function UploadArea() {
     }
   };
 
-  // Handle small file uploads via the normal API endpoint
+  // Add a function to simulate verification progress
+  const simulateVerificationProgress = (onProgress: (progress: number) => void, onComplete: () => void) => {
+    let progress = 0;
+    const interval = setInterval(() => {
+      progress += 10;
+      onProgress(progress);
+      if (progress >= 100) {
+        clearInterval(interval);
+        onComplete();
+      }
+    }, 100);
+    return interval;
+  };
+
+  // Update handleSmallFileUpload
   const handleSmallFileUpload = (file: File) => {
-    // Create a FormData object to upload the file
+    setUploadPhase('uploading');
+    setUploadProgress(0);
+    
     const formData = new FormData();
     formData.append('file', file);
     
-    // Upload the file to get the file path
-    axios.post('/api/upload', formData)
+    axios.post('/api/upload', formData, {
+      onUploadProgress: (progressEvent) => {
+        const progress = progressEvent.total
+          ? Math.round((progressEvent.loaded * 100) / progressEvent.total)
+          : 0;
+        setUploadProgress(progress);
+      }
+    })
       .then(response => {
+        setUploadPhase('verifying');
+        setUploadProgress(0);
+        
         if (response.data.success) {
-          setFileDetails({
-            name: file.name,
-            size: file.size,
-            type: file.type,
-            path: response.data.filePath,
-            isSupabaseStorage: false
-          });
-          setIsValidFile(true);
-          
-          // Check free trial status for non-authenticated users
-          if (!isAuthenticated) {
-            checkFreeTrialStatus();
-          } else {
-            setFreeTrialUsed(false);
-          }
+          // Simulate verification progress
+          const interval = simulateVerificationProgress(
+            (progress) => setUploadProgress(progress),
+            () => {
+              setFileDetails({
+                name: file.name,
+                size: file.size,
+                type: file.type,
+                path: response.data.filePath,
+                isSupabaseStorage: false
+              });
+              setIsValidFile(true);
+              setUploadPhase(null);
+              
+              if (!isAuthenticated) {
+                checkFreeTrialStatus();
+              } else {
+                setFreeTrialUsed(false);
+              }
+            }
+          );
+
+          // Clean up interval if component unmounts
+          return () => clearInterval(interval);
         } else {
           setDropError(response.data.error || 'Failed to upload file');
           setIsValidFile(false);
+          setUploadPhase(null);
         }
       })
       .catch(error => {
         console.error('Error uploading file:', error);
         setDropError(error.response?.data?.error || error.message || 'Failed to upload file');
         setIsValidFile(false);
+        setUploadPhase(null);
       });
   };
 
-  // Handle large file uploads for authenticated users
+  // Update handleAuthenticatedLargeFileUpload
   const handleAuthenticatedLargeFileUpload = (file: File) => {
     console.log("User authenticated, using direct Supabase upload");
+    setUploadPhase('uploading');
+    setUploadProgress(0);
     
-    // Use direct Supabase upload for all users (both logged in and logged out)
-    // This completely bypasses the Vercel serverless functions
     uploadLargeFileToSupabase(
       file, 
       'audio-uploads', 
       'uploads',
       (progress) => {
-        // Update progress in UI if needed
-        console.log(`Upload progress: ${Math.round(progress * 100)}%`);
+        setUploadProgress(Math.round(progress * 100));
       }
     )
-    .then(result => {
+    .then((result: UploadResult) => {
+      setUploadPhase('verifying');
+      setUploadProgress(0);
+      
       if (result.success && result.url && result.filePath) {
-        // Verify the upload with our backend
-        return axios.post('/api/upload-verify', { filePath: result.filePath })
-          .then(verifyResponse => {
-            if (verifyResponse.data.success) {
-              return {
-                success: true,
-                filePath: result.filePath,
-                url: verifyResponse.data.url || result.url
-              };
-            } else {
-              throw new Error('Failed to verify upload');
+        return new Promise<VerificationResult>((resolve, reject) => {
+          const interval = simulateVerificationProgress(
+            (progress) => setUploadProgress(progress),
+            () => {
+              axios.post('/api/upload-verify', { filePath: result.filePath })
+                .then(verifyResponse => {
+                  if (verifyResponse.data.success) {
+                    resolve({
+                      success: true,
+                      filePath: result.filePath!,
+                      url: verifyResponse.data.url || result.url!
+                    });
+                  } else {
+                    reject(new Error('Failed to verify upload'));
+                  }
+                })
+                .catch(reject);
             }
-          })
-          .catch(verifyError => {
-            console.warn('Upload verification warning:', verifyError);
-            // Continue even if verification fails, using the original result
-            return {
-              success: true,
-              filePath: result.filePath,
-              url: result.url,
-              verified: false
-            };
-          });
+          );
+
+          // Clean up interval if promise is rejected
+          return () => clearInterval(interval);
+        });
       } else {
         throw new Error(result.error?.message || 'Failed to upload file to storage');
       }
     })
-    .then(result => {
+    .then((result: VerificationResult) => {
       setFileDetails({
         name: file.name,
         size: file.size,
@@ -413,63 +471,64 @@ export function UploadArea() {
         isSupabaseStorage: true
       });
       setIsValidFile(true);
-      setFreeTrialUsed(false); // Authenticated users use credits, not free trial
+      setFreeTrialUsed(false);
+      setUploadPhase(null);
     })
     .catch(error => {
       console.error('Error uploading to Supabase:', error);
       setDropError(error.message || 'Failed to upload file. Please try again.');
       setIsValidFile(false);
+      setUploadPhase(null);
     });
   };
 
-  // Handle large file uploads for unauthenticated users
+  // Update handleUnauthenticatedLargeFileUpload
   const handleUnauthenticatedLargeFileUpload = (file: File) => {
     console.log("User not authenticated, using direct Supabase upload");
+    setUploadPhase('uploading');
+    setUploadProgress(0);
     
-    // Track upload progress for UI feedback
-    setIsValidFile(null);
-    
-    // Use direct Supabase upload for all users (both logged in and logged out)
-    // This completely bypasses the Vercel serverless functions
     uploadLargeFileToSupabase(
       file, 
       'audio-uploads', 
       'uploads',
       (progress) => {
-        // Update progress in UI if needed
-        console.log(`Upload progress: ${Math.round(progress * 100)}%`);
+        setUploadProgress(Math.round(progress * 100));
       }
     )
-    .then(result => {
+    .then((result: UploadResult) => {
+      setUploadPhase('verifying');
+      setUploadProgress(0);
+      
       if (result.success && result.url && result.filePath) {
-        // Verify the upload with our backend
-        return axios.post('/api/upload-verify', { filePath: result.filePath })
-          .then(verifyResponse => {
-            if (verifyResponse.data.success) {
-              return {
-                success: true,
-                filePath: result.filePath,
-                url: verifyResponse.data.url || result.url
-              };
-            } else {
-              throw new Error('Failed to verify upload');
+        return new Promise<VerificationResult>((resolve, reject) => {
+          const interval = simulateVerificationProgress(
+            (progress) => setUploadProgress(progress),
+            () => {
+              axios.post('/api/upload-verify', { filePath: result.filePath })
+                .then(verifyResponse => {
+                  if (verifyResponse.data.success) {
+                    resolve({
+                      success: true,
+                      filePath: result.filePath!,
+                      url: verifyResponse.data.url || result.url!
+                    });
+                  } else {
+                    reject(new Error('Failed to verify upload'));
+                  }
+                })
+                .catch(reject);
             }
-          })
-          .catch(verifyError => {
-            console.warn('Upload verification warning:', verifyError);
-            // Continue even if verification fails, using the original result
-            return {
-              success: true,
-              filePath: result.filePath,
-              url: result.url,
-              verified: false
-            };
-          });
+          );
+
+          // Clean up interval if promise is rejected
+          return () => clearInterval(interval);
+        });
       } else {
         throw new Error(result.error?.message || 'Upload failed');
       }
     })
-    .then(result => {
+    .then((result: VerificationResult) => {
       setFileDetails({
         name: file.name,
         size: file.size,
@@ -479,15 +538,15 @@ export function UploadArea() {
         isSupabaseStorage: true
       });
       setIsValidFile(true);
+      setUploadPhase(null);
       
-      // Check free trial status
       checkFreeTrialStatus();
     })
     .catch(error => {
       console.error('Error uploading file:', error);
-      
       setDropError(error.message || 'Failed to upload file. Please try again.');
       setIsValidFile(false);
+      setUploadPhase(null);
     });
   };
 
@@ -616,26 +675,19 @@ export function UploadArea() {
 
   const resetFile = useCallback(() => {
     console.log("Resetting file state");
-    // Force update by cloning and updating in one batch
     setFileDetails(null);
     setIsValidFile(null);
     setDropError(null);
     setProcessingError(null);
     setExtractedStems(null);
+    setUploadPhase(null);
+    setUploadProgress(0);
     
-    // Clear the file input value so the same file can be selected again
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
     
-    // Force re-render if needed
     setTimeout(() => {
-      console.log("State after reset:", {
-        fileDetails: null,
-        isValidFile: null,
-        dropError: null
-      });
-      // Force react to re-render by setting state again if needed
       if (fileDetails !== null) {
         setFileDetails(null);
       }
@@ -701,6 +753,16 @@ export function UploadArea() {
         transition={{ duration: 0.5 }}
         className="flex flex-col items-center"
       >
+        {/* Show upload progress only during upload and verification */}
+        {uploadPhase && (
+          <UploadProgress
+            currentPhase={uploadPhase}
+            uploadProgress={uploadProgress}
+            fileName={fileDetails?.name || ''}
+            fileSize={fileDetails ? formatFileSize(fileDetails.size) : ''}
+          />
+        )}
+
         {/* Separate file input outside of dropzone */}
         <input 
           type="file" 
