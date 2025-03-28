@@ -30,7 +30,7 @@ export default function Home() {
               shimmerColor="rgba(138, 180, 248, 0.8)"
               background="rgba(25, 55, 125, 0.4)"
             >
-              Upload Your Music
+              Try Now
             </ShimmerButton>
           ) : (
             <ShimmerButton 
