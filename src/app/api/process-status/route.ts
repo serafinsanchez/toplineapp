@@ -7,6 +7,7 @@ import { convertWavToMp3 } from '@/lib/audio-converter';
 import { promisify } from 'util';
 
 const readFileAsync = promisify(fs.readFile);
+const fsExistsAsync = promisify(fs.exists);
 
 // Temporary directory for uploaded files - use /tmp for Vercel serverless environment
 const TEMP_DIR = process.env.VERCEL ? '/tmp' : path.join(process.cwd(), 'tmp');
@@ -52,12 +53,53 @@ export async function GET(request: NextRequest) {
         );
       }
 
+      // Check if we already have MP3 paths stored
+      const acapella_mp3_path = (job as any).acapella_mp3_path;
+      const instrumental_mp3_path = (job as any).instrumental_mp3_path;
+      
+      if (acapella_mp3_path && instrumental_mp3_path) {
+        // If MP3 paths exist but files don't exist anymore, just return success
+        // This handles the case where we've already sent the files and cleaned them up
+        return NextResponse.json({
+          success: true,
+          status: 'COMPLETED',
+          message: 'Files were already converted and sent'
+        });
+      }
+
       try {
+        // First check if the WAV files still exist
+        const acapellaExists = await fsExistsAsync(job.acapella_path);
+        const instrumentalExists = await fsExistsAsync(job.instrumental_path);
+
+        if (!acapellaExists || !instrumentalExists) {
+          console.log(`WAV files for job ${processId} no longer exist. They may have been processed already.`);
+          return NextResponse.json({
+            success: true,
+            status: 'COMPLETED',
+            message: 'Files were already processed'
+          });
+        }
+
         console.log('Converting WAV files to MP3...');
         
         // Convert WAV files to MP3
         const acapellaMp3Path = await convertWavToMp3(job.acapella_path);
         const instrumentalMp3Path = await convertWavToMp3(job.instrumental_path);
+        
+        // Update the database with MP3 paths
+        const { error: updateError } = await supabaseAdmin
+          .from('processing_jobs')
+          .update({
+            acapella_mp3_path: acapellaMp3Path,
+            instrumental_mp3_path: instrumentalMp3Path,
+            updated_at: new Date().toISOString()
+          })
+          .eq('process_id', processId);
+          
+        if (updateError) {
+          console.error('Error updating MP3 paths:', updateError);
+        }
         
         // Read the converted MP3 files
         const acapellaData = await readFileAsync(acapellaMp3Path, { encoding: 'base64' });
@@ -150,17 +192,8 @@ export async function GET(request: NextRequest) {
         // Log success
         console.log(`Successfully processed job ${processId}`);
         
-        // Clean up temporary files after they've been sent to the client
-        try {
-          await cleanupFiles([
-            stemResult.acapellaPath,
-            stemResult.instrumentalPath
-          ]);
-          console.log(`Cleaned up temporary files for job ${processId}`);
-        } catch (cleanupError) {
-          console.warn('Failed to clean up temporary files:', cleanupError);
-          // Continue despite cleanup errors - don't fail the request
-        }
+        // We won't clean up the files here since we might need them for MP3 conversion
+        // in a subsequent request
         
         return NextResponse.json({
           success: true,

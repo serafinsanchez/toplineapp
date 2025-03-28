@@ -52,8 +52,32 @@ export async function checkFfmpeg(): Promise<boolean> {
  */
 async function validateInputFile(inputPath: string): Promise<void> {
   try {
+    if (!inputPath) {
+      throw new Error('Input file path is empty or undefined');
+    }
+    
+    console.log(`Validating input file: ${inputPath}`);
+    
+    // Check if file exists first
+    if (!fs.existsSync(inputPath)) {
+      throw new Error(`Input file does not exist at path: ${inputPath}`);
+    }
+    
+    // Then check if it's readable
     await fsAccess(inputPath, fs.constants.R_OK);
+    
+    // Get file stats for additional validation
+    const stats = fs.statSync(inputPath);
+    if (stats.size === 0) {
+      throw new Error(`Input file is empty: ${inputPath}`);
+    }
+    
+    console.log(`Successfully validated input file: ${inputPath} (size: ${stats.size} bytes)`);
   } catch (error) {
+    console.error(`File validation error for ${inputPath}:`, error);
+    if (error instanceof Error) {
+      throw new Error(`Input file ${inputPath} does not exist or is not readable: ${error.message}`);
+    }
     throw new Error(`Input file ${inputPath} does not exist or is not readable`);
   }
 }

@@ -113,6 +113,8 @@ export interface Database {
           updated_at: string
           acapella_path: string | null
           instrumental_path: string | null
+          acapella_mp3_path: string | null
+          instrumental_mp3_path: string | null
         }
         Insert: {
           id?: number
@@ -125,6 +127,8 @@ export interface Database {
           updated_at?: string
           acapella_path?: string | null
           instrumental_path?: string | null
+          acapella_mp3_path?: string | null
+          instrumental_mp3_path?: string | null
         }
         Update: {
           id?: number
@@ -137,6 +141,8 @@ export interface Database {
           updated_at?: string
           acapella_path?: string | null
           instrumental_path?: string | null
+          acapella_mp3_path?: string | null
+          instrumental_mp3_path?: string | null
         }
         Relationships: [
           {
