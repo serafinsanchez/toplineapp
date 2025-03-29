@@ -12,6 +12,9 @@ const fsExistsAsync = promisify(fs.exists);
 const TEMP_DIR = process.env.VERCEL ? '/tmp' : path.join(process.cwd(), 'tmp');
 const RESULTS_DIR = path.join(TEMP_DIR, 'results');
 
+// Add this near the top of the file with other constants
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB max file size for processing
+
 export async function GET(request: NextRequest) {
   try {
     // Get the process ID from the query string
@@ -52,49 +55,13 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      try {
-        // Check if the WAV files still exist
-        const acapellaExists = await fsExistsAsync(job.acapella_path);
-        const instrumentalExists = await fsExistsAsync(job.instrumental_path);
-
-        if (!acapellaExists || !instrumentalExists) {
-          console.log(`WAV files for job ${processId} no longer exist. They may have been processed already.`);
-          return NextResponse.json({
-            success: true,
-            status: 'COMPLETED',
-            message: 'Files were already processed'
-          });
-        }
-        
-        // Read the WAV files directly
-        const acapellaData = await readFileAsync(job.acapella_path, { encoding: 'base64' });
-        const instrumentalData = await readFileAsync(job.instrumental_path, { encoding: 'base64' });
-        
-        // Clean up the files
-        await cleanupFiles([
-          job.acapella_path,
-          job.instrumental_path
-        ]);
-        
-        return NextResponse.json({
-          success: true,
-          status: 'COMPLETED',
-          acapella: {
-            data: acapellaData,
-            type: 'audio/wav'
-          },
-          instrumental: {
-            data: instrumentalData,
-            type: 'audio/wav'
-          }
-        });
-      } catch (error) {
-        console.error('Error processing audio files:', error);
-        return NextResponse.json(
-          { success: false, error: 'Error processing audio files' },
-          { status: 500 }
-        );
-      }
+      // Don't try to read the files if they're already processed
+      // Just inform the client that the job is complete, but files were already processed
+      return NextResponse.json({
+        success: true,
+        status: 'COMPLETED',
+        message: 'Job completed successfully, but files are no longer available. Refresh the page and try again.'
+      });
     } else if (job.status === 'FAILED') {
       return NextResponse.json({
         success: false,
@@ -144,6 +111,33 @@ export async function GET(request: NextRequest) {
           await deductCredit(job.user_id);
         }
         
+        // Check file sizes before reading to prevent memory issues
+        const acapellaStats = fs.statSync(stemResult.acapellaPath);
+        const instrumentalStats = fs.statSync(stemResult.instrumentalPath);
+        const totalSize = acapellaStats.size + instrumentalStats.size;
+        
+        console.log(`Acapella file size: ${acapellaStats.size} bytes`);
+        console.log(`Instrumental file size: ${instrumentalStats.size} bytes`);
+        
+        if (totalSize > MAX_FILE_SIZE) {
+          console.warn(`Files are too large (${totalSize} bytes) to return via API. Limit is ${MAX_FILE_SIZE} bytes.`);
+          // Update job status to FAILED to indicate the issue
+          await supabaseAdmin
+            .from('processing_jobs')
+            .update({
+              status: 'FAILED',
+              error: 'Files are too large to return via API',
+              updated_at: new Date().toISOString()
+            })
+            .eq('process_id', processId);
+            
+          return NextResponse.json({
+            success: false,
+            status: 'FAILED',
+            error: 'Files are too large to return. Try with a shorter audio file.'
+          });
+        }
+        
         // Read the output files
         const acapellaBuffer = fs.readFileSync(stemResult.acapellaPath);
         const instrumentalBuffer = fs.readFileSync(stemResult.instrumentalPath);
@@ -156,6 +150,18 @@ export async function GET(request: NextRequest) {
         console.log(`Successfully processed job ${processId}`);
         console.log(`Acapella base64 data length: ${acapellaBase64.length}`);
         console.log(`Instrumental base64 data length: ${instrumentalBase64.length}`);
+        
+        // After returning the completed job response with base64 data, schedule cleanup for a later time
+        // Schedule cleanup to happen after response is sent
+        setTimeout(async () => {
+          try {
+            console.log(`Scheduling cleanup of files for job ${job.job_id}...`);
+            await cleanupFiles([stemResult.acapellaPath, stemResult.instrumentalPath]);
+            console.log(`Cleanup completed for job ${job.job_id}`);
+          } catch (cleanupError) {
+            console.error(`Error during delayed cleanup: ${cleanupError}`);
+          }
+        }, 10000); // 10 seconds delay
         
         return NextResponse.json({
           success: true,

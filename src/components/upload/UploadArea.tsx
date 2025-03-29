@@ -121,7 +121,7 @@ export function UploadArea() {
           // Check the job status
           console.log(`Checking status for process ID: ${processId} (attempt ${attempts}/${maxAttempts})`);
           const statusResponse = await axios.get(`/api/process-status?processId=${processId}`, {
-            timeout: 30000 // 30 seconds timeout for status check
+            timeout: 60000 // 60 seconds timeout for status check to accommodate large responses
           });
           
           const statusData = statusResponse.data;
@@ -129,6 +129,14 @@ export function UploadArea() {
           
           if (statusData.status === 'COMPLETED') {
             completed = true;
+            
+            // Check if the response contains the actual audio data
+            if (!statusData.acapella || !statusData.instrumental) {
+              console.error('Job completed but audio data is missing');
+              setIsProcessing(false);
+              setProcessingError(statusData.message || 'Stems were processed but are no longer available. Please try again.');
+              return;
+            }
             
             // Process the completed job
             // Get file name without extension
@@ -145,7 +153,9 @@ export function UploadArea() {
             
             if (!hasAcapellaData || !hasInstrumentalData) {
               console.error('Invalid response structure from status check');
-              throw new Error('Invalid response data');
+              setIsProcessing(false);
+              setProcessingError('Server returned invalid data. Please try again.');
+              return;
             }
             
             // Create explicit type values for safety
@@ -221,6 +231,14 @@ export function UploadArea() {
             console.log(`Processing status: ${statusData.status || 'unknown'}`);
           }
         } catch (pollError: any) {
+          // Check for timeout errors
+          if (pollError.code === 'ECONNABORTED' || (pollError.message && pollError.message.includes('timeout'))) {
+            console.error('Timeout error while checking status. Response may be too large.');
+            setIsProcessing(false);
+            setProcessingError('Processing took too long or produced files that are too large. Try with a shorter audio file.');
+            return; // Exit the polling loop on timeout
+          }
+          
           if (pollError.response && pollError.response.status === 404) {
             // Job not found, stop polling
             throw new Error('Processing job not found');
