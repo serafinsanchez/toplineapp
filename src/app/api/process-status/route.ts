@@ -3,7 +3,6 @@ import fs from 'fs';
 import path from 'path';
 import { createServiceRoleClient } from '@/lib/supabase';
 import { checkJobStatus, downloadStems, cleanupJob, cleanupFiles, deductCredit } from '@/lib/audio-processor';
-import { convertWavToMp3 } from '@/lib/audio-converter';
 import { promisify } from 'util';
 
 const readFileAsync = promisify(fs.readFile);
@@ -53,22 +52,8 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      // Check if we already have MP3 paths stored
-      const acapella_mp3_path = (job as any).acapella_mp3_path;
-      const instrumental_mp3_path = (job as any).instrumental_mp3_path;
-      
-      if (acapella_mp3_path && instrumental_mp3_path) {
-        // If MP3 paths exist but files don't exist anymore, just return success
-        // This handles the case where we've already sent the files and cleaned them up
-        return NextResponse.json({
-          success: true,
-          status: 'COMPLETED',
-          message: 'Files were already converted and sent'
-        });
-      }
-
       try {
-        // First check if the WAV files still exist
+        // Check if the WAV files still exist
         const acapellaExists = await fsExistsAsync(job.acapella_path);
         const instrumentalExists = await fsExistsAsync(job.instrumental_path);
 
@@ -80,37 +65,15 @@ export async function GET(request: NextRequest) {
             message: 'Files were already processed'
           });
         }
-
-        console.log('Converting WAV files to MP3...');
         
-        // Convert WAV files to MP3
-        const acapellaMp3Path = await convertWavToMp3(job.acapella_path);
-        const instrumentalMp3Path = await convertWavToMp3(job.instrumental_path);
+        // Read the WAV files directly
+        const acapellaData = await readFileAsync(job.acapella_path, { encoding: 'base64' });
+        const instrumentalData = await readFileAsync(job.instrumental_path, { encoding: 'base64' });
         
-        // Update the database with MP3 paths
-        const { error: updateError } = await supabaseAdmin
-          .from('processing_jobs')
-          .update({
-            acapella_mp3_path: acapellaMp3Path,
-            instrumental_mp3_path: instrumentalMp3Path,
-            updated_at: new Date().toISOString()
-          })
-          .eq('process_id', processId);
-          
-        if (updateError) {
-          console.error('Error updating MP3 paths:', updateError);
-        }
-        
-        // Read the converted MP3 files
-        const acapellaData = await readFileAsync(acapellaMp3Path, { encoding: 'base64' });
-        const instrumentalData = await readFileAsync(instrumentalMp3Path, { encoding: 'base64' });
-        
-        // Clean up all files (WAV and MP3)
+        // Clean up the files
         await cleanupFiles([
           job.acapella_path,
-          job.instrumental_path,
-          acapellaMp3Path,
-          instrumentalMp3Path
+          job.instrumental_path
         ]);
         
         return NextResponse.json({
@@ -118,17 +81,17 @@ export async function GET(request: NextRequest) {
           status: 'COMPLETED',
           acapella: {
             data: acapellaData,
-            type: 'audio/mp3'
+            type: 'audio/wav'
           },
           instrumental: {
             data: instrumentalData,
-            type: 'audio/mp3'
+            type: 'audio/wav'
           }
         });
-      } catch (conversionError) {
-        console.error('Error converting audio files:', conversionError);
+      } catch (error) {
+        console.error('Error processing audio files:', error);
         return NextResponse.json(
-          { success: false, error: 'Error converting audio files' },
+          { success: false, error: 'Error processing audio files' },
           { status: 500 }
         );
       }
@@ -192,9 +155,6 @@ export async function GET(request: NextRequest) {
         // Log success
         console.log(`Successfully processed job ${processId}`);
         
-        // We won't clean up the files here since we might need them for MP3 conversion
-        // in a subsequent request
-        
         return NextResponse.json({
           success: true,
           status: 'COMPLETED',
@@ -248,7 +208,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Error in process-status:', error);
     return NextResponse.json(
-      { success: false, error: 'Server error' },
+      { success: false, error: error.message || 'An unexpected error occurred' },
       { status: 500 }
     );
   }
