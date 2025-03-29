@@ -152,8 +152,10 @@ export async function GET(request: NextRequest) {
         const acapellaBase64 = acapellaBuffer.toString('base64');
         const instrumentalBase64 = instrumentalBuffer.toString('base64');
         
-        // Log success
+        // Log success and data sizes for debugging
         console.log(`Successfully processed job ${processId}`);
+        console.log(`Acapella base64 data length: ${acapellaBase64.length}`);
+        console.log(`Instrumental base64 data length: ${instrumentalBase64.length}`);
         
         return NextResponse.json({
           success: true,

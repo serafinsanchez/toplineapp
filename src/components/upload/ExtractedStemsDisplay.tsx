@@ -6,7 +6,16 @@ import { StemExtractionResult } from "@/types";
 
 // Utility function to convert base64 to Blob
 function base64ToBlob(base64: string, type: string): Blob {
-  const byteCharacters = atob(base64.split(',')[1]);
+  // Check if this is a data URL (contains comma) or raw base64
+  let byteCharacters: string;
+  if (base64.includes(',')) {
+    // Data URL format: "data:audio/wav;base64,ACTUAL_BASE64_DATA"
+    byteCharacters = atob(base64.split(',')[1]);
+  } else {
+    // Raw base64 format: just the encoded data
+    byteCharacters = atob(base64);
+  }
+  
   const byteNumbers = new Array(byteCharacters.length);
   
   for (let i = 0; i < byteCharacters.length; i++) {

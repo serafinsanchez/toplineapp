@@ -158,6 +158,14 @@ export function UploadArea() {
               : 'audio/wav';
             
             // Create object URLs for the audio files
+            console.log(`Creating blobs from audio data. Acapella data length: ${typeof statusData.acapella.data === 'string' ? statusData.acapella.data.length : 'not a string'}`);
+            console.log(`Instrumental data length: ${typeof statusData.instrumental.data === 'string' ? statusData.instrumental.data.length : 'not a string'}`);
+            
+            // Sample first 20 chars to check format
+            if (typeof statusData.acapella.data === 'string' && statusData.acapella.data.length > 20) {
+              console.log(`Acapella data starts with: ${statusData.acapella.data.substring(0, 20)}...`);
+            }
+            
             const acapellaBlob = base64ToBlob(
               statusData.acapella.data, 
               'audio/wav'
@@ -167,6 +175,8 @@ export function UploadArea() {
               statusData.instrumental.data, 
               'audio/wav'
             );
+            
+            console.log(`Blobs created. Acapella blob size: ${acapellaBlob.size}, Instrumental blob size: ${instrumentalBlob.size}`);
             
             // Update the extracted stems with URLs and custom file names
             setExtractedStems({
@@ -278,7 +288,18 @@ export function UploadArea() {
         : 'audio/wav';
       
       try {
-        const binaryString = window.atob(base64);
+        // Check if this is a data URL (contains comma) or raw base64
+        let binaryString: string;
+        if (base64.includes(',')) {
+          // Data URL format: "data:audio/wav;base64,ACTUAL_BASE64_DATA"
+          binaryString = window.atob(base64.split(',')[1]);
+          console.log('Processing data URL format base64');
+        } else {
+          // Raw base64 format: just the encoded data
+          binaryString = window.atob(base64);
+          console.log('Processing raw base64 format');
+        }
+        
         const bytes = new Uint8Array(binaryString.length);
         
         for (let i = 0; i < binaryString.length; i++) {
