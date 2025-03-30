@@ -109,7 +109,7 @@ export default function SignIn() {
             </div>
 
             {error && (
-              <div className="text-red-500 text-sm font-medium">{error}</div>
+              <div className="text-black text-sm font-medium">{error}</div>
             )}
 
             <Button

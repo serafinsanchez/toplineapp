@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LogIn, UserPlus } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { createServiceRoleClient } from "@/lib/supabase";
 
 // More comprehensive email validation regex
 const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
@@ -30,37 +29,23 @@ export default function SignUp() {
 
   const createUserProfile = async (userId: string, userName: string, userEmail: string) => {
     try {
-      // Use the service role client to bypass RLS
-      const supabaseAdmin = createServiceRoleClient();
+      const response = await fetch('/api/profile/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId,
+          userName,
+          userEmail
+        }),
+      });
       
-      // Check if profile already exists
-      const { data: existingProfile } = await supabaseAdmin
-        .from('user_profiles')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
+      const data = await response.json();
       
-      if (existingProfile) {
-        // Update existing profile
-        await supabaseAdmin
-          .from('user_profiles')
-          .update({
-            name: userName,
-            email: userEmail,
-            updated_at: new Date().toISOString()
-          })
-          .eq('user_id', userId);
-      } else {
-        // Create new profile
-        await supabaseAdmin
-          .from('user_profiles')
-          .insert({
-            user_id: userId,
-            name: userName,
-            email: userEmail,
-            role: 'user',
-            balance: 0
-          });
+      if (!response.ok) {
+        console.error("Error creating user profile:", data.error);
+        return false;
       }
       
       console.log("User profile created/updated successfully");
@@ -255,11 +240,11 @@ export default function SignUp() {
             </div>
 
             {error && (
-              <div className="text-red-500 text-sm font-medium">{error}</div>
+              <div className="text-black text-sm font-medium">{error}</div>
             )}
             
             {successMessage && (
-              <div className="text-green-500 text-sm font-medium">{successMessage}</div>
+              <div className="text-black text-sm font-medium">{successMessage}</div>
             )}
 
             <Button
