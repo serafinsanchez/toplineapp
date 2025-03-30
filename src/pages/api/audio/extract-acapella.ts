@@ -47,12 +47,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let inputFilePath = '';
     
     // Check if we have a file upload
-    const uploadedFile = files.file as formidable.File;
-    if (uploadedFile && uploadedFile.filepath) {
-      // Use the uploaded file
-      inputFilePath = uploadedFile.filepath;
-      // Don't add to cleanup as formidable handles this
-    } 
+    const fileField = files.file;
+    
+    if (fileField) {
+      const uploadedFile = Array.isArray(fileField) ? fileField[0] : fileField;
+      if (uploadedFile && uploadedFile.filepath) {
+        // Use the uploaded file
+        inputFilePath = uploadedFile.filepath;
+        // Don't add to cleanup as formidable handles this
+      }
+    }
     // Or check if we have a file URL
     else if (fields.url && typeof fields.url === 'string') {
       // Download the file from the URL

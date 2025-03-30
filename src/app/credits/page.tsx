@@ -30,6 +30,8 @@ function PaymentStatus({ onSuccess }: { onSuccess: () => void }) {
   const searchParams = useSearchParams();
 
   useEffect(() => {
+    if (!searchParams) return;
+    
     const success = searchParams.get('success');
     const canceled = searchParams.get('canceled');
     
