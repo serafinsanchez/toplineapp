@@ -992,7 +992,7 @@ export function UploadArea() {
             <p className="text-center">
               <span className="font-medium text-blue-400">Thanks for trying it out!</span>{' '}
               <span className="text-muted-foreground">
-                Sign up to add extract more stems.
+                Sign up and add credits to add extract more stems.
               </span>
             </p>
           </motion.div>
