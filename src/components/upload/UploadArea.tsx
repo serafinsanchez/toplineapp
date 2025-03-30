@@ -86,7 +86,7 @@ export function UploadArea() {
         processRequest = { url: fileDetails.url };
       } else if (fileDetails.url) {
         console.log(`Using URL for processing: ${fileDetails.url.substring(0, 50)}...`);
-        processRequest = { url: fileDetails.url };
+        processRequest = { filePath: fileDetails.url };
       } else {
         console.log(`Using file path for processing: ${fileDetails.path}`);
         processRequest = { filePath: fileDetails.path };
