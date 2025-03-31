@@ -105,14 +105,14 @@ export function Header() {
       <div className="flex-1 flex justify-end items-center gap-4">
         {isAuthenticated ? (
           <>
-            <div className="bg-muted/30 px-4 py-2 rounded-full">
-              <span className="text-sm font-medium">
+            <div className="bg-blue-900/30 px-4 py-2 rounded-full">
+              <span className="text-sm font-medium text-white">
                 {isLoading ? '...' : `${credits} credits`}
               </span>
             </div>
             
-            <div className="bg-muted/30 px-4 py-2 rounded-full">
-              <span className="text-sm font-medium">
+            <div className="bg-blue-900/30 px-4 py-2 rounded-full">
+              <span className="text-sm font-medium text-white">
                 {session.user.name || session.user.email}
               </span>
             </div>
@@ -121,7 +121,7 @@ export function Header() {
               variant="ghost" 
               size="icon" 
               onClick={handleLogout}
-              className="rounded-full hover:bg-destructive/10 hover:text-destructive"
+              className="rounded-full hover:bg-destructive/10 hover:text-destructive text-white"
             >
               <LogOut size={18} />
             </Button>
@@ -131,13 +131,13 @@ export function Header() {
             <Button 
               variant="outline" 
               onClick={() => router.push('/auth/signin')}
-              className="px-4"
+              className="px-4 text-white border-white/20 hover:bg-white/10"
             >
               Sign In
             </Button>
             <Button 
               onClick={() => router.push('/auth/signup')}
-              className="px-4 bg-primary hover:bg-primary/90"
+              className="px-4 bg-blue-500 hover:bg-blue-600 text-white"
             >
               Sign Up
             </Button>

@@ -180,10 +180,10 @@ export default function CreditsPage() {
         >
           <div className="mb-8 flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-semibold tracking-tight mb-2">
+              <h1 className="text-3xl font-semibold tracking-tight mb-2 text-white">
                 Credits
               </h1>
-              <p className="text-muted-foreground">
+              <p className="text-white/70">
                 Purchase credits to process more audio files
               </p>
             </div>
@@ -192,7 +192,7 @@ export default function CreditsPage() {
               size="sm"
               onClick={refreshData}
               disabled={isRefreshing || !session?.user}
-              className="z-50 relative hover:bg-white/10 active:bg-white/20"
+              className="z-50 relative bg-blue-900/30 text-white border-blue-500/50 hover:bg-blue-800/50"
             >
               {isRefreshing ? (
                 <>
@@ -211,11 +211,11 @@ export default function CreditsPage() {
           <div className="bg-black/20 backdrop-blur-xl rounded-xl border border-white/10 p-6 mb-8">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-medium mb-1">Current Balance</h2>
+                <h2 className="text-xl font-medium mb-1 text-white">Current Balance</h2>
                 {isLoading ? (
                   <div className="h-8 w-24 bg-white/10 animate-pulse rounded" />
                 ) : (
-                  <p className="text-3xl font-bold">
+                  <p className="text-3xl font-bold text-white">
                     {creditBalance !== null ? creditBalance : '0'} credits
                   </p>
                 )}
@@ -226,16 +226,16 @@ export default function CreditsPage() {
                     variant="outline"
                     size="icon"
                     onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                    className="h-8 w-8"
+                    className="h-8 w-8 bg-blue-900/30 text-white border-blue-500/50 hover:bg-blue-800/50"
                   >
                     -
                   </Button>
-                  <span className="w-12 text-center">{quantity}</span>
+                  <span className="w-12 text-center text-white">{quantity}</span>
                   <Button
                     variant="outline"
                     size="icon"
                     onClick={() => setQuantity(quantity + 1)}
-                    className="h-8 w-8"
+                    className="h-8 w-8 bg-blue-900/30 text-white border-blue-500/50 hover:bg-blue-800/50"
                   >
                     +
                   </Button>
@@ -243,7 +243,7 @@ export default function CreditsPage() {
                 <Button
                   onClick={handlePurchase}
                   disabled={loading || !session?.user}
-                  className="relative z-50"
+                  className="relative z-50 bg-blue-500 hover:bg-blue-600 text-white"
                 >
                   {loading ? (
                     <>
@@ -261,13 +261,13 @@ export default function CreditsPage() {
           </div>
 
           <div className="bg-black/20 backdrop-blur-xl rounded-xl border border-white/10 p-6">
-            <h2 className="text-xl font-medium mb-4">Transaction History</h2>
+            <h2 className="text-xl font-medium mb-4 text-white">Transaction History</h2>
             {!session?.user ? (
-              <p className="text-muted-foreground">
+              <p className="text-white/70">
                 Please sign in to view your transaction history
               </p>
             ) : transactions.length === 0 ? (
-              <p className="text-muted-foreground">No transactions yet</p>
+              <p className="text-white/70">No transactions yet</p>
             ) : (
               <div className="space-y-4">
                 {transactions.map((transaction) => (
@@ -276,14 +276,14 @@ export default function CreditsPage() {
                     className="flex items-center justify-between p-4 rounded-lg bg-white/5"
                   >
                     <div>
-                      <p className="font-medium">
+                      <p className="font-medium text-white">
                         {transaction.type === 'purchase' ? 'Credits Purchased' : 'Credits Used'}
                       </p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-sm text-white/70">
                         {formatDate(transaction.created_at)}
                       </p>
                     </div>
-                    <p className="text-lg font-medium">
+                    <p className="text-lg font-medium text-white">
                       {transaction.type === 'purchase' ? '+' : ''}{transaction.amount}
                     </p>
                   </div>

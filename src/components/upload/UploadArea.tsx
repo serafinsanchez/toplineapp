@@ -991,7 +991,7 @@ export function UploadArea() {
           >
             <p className="text-center">
               <span className="font-medium text-blue-400">Thanks for trying it out!</span>{' '}
-              <span className="text-muted-foreground">
+              <span className="text-white/70">
                 Sign up and add credits to add extract more stems.
               </span>
             </p>
