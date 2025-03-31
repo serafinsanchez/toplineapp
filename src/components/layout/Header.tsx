@@ -131,7 +131,7 @@ export function Header() {
             <Button 
               variant="outline" 
               onClick={() => router.push('/auth/signin')}
-              className="px-4 text-white border-white/20 hover:bg-white/10"
+              className="px-4 bg-blue-900/30 text-white border-blue-500/50 hover:bg-blue-800/50"
             >
               Sign In
             </Button>

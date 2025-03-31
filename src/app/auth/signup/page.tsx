@@ -178,15 +178,15 @@ export default function SignUp() {
       <div className="min-h-screen w-full flex flex-col items-center justify-center">
         <div className="w-full max-w-md p-8 space-y-8 bg-black/20 backdrop-blur-xl rounded-xl border border-white/10">
           <div className="text-center">
-            <h1 className="text-3xl font-bold tracking-tight">Sign Up</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
+            <h1 className="text-3xl font-bold tracking-tight text-white">Sign Up</h1>
+            <p className="mt-2 text-sm text-white/70">
               Create an account to get started
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
+              <Label htmlFor="name" className="text-white">Full Name</Label>
               <Input
                 id="name"
                 type="text"
@@ -194,11 +194,12 @@ export default function SignUp() {
                 onChange={(e) => setName(e.target.value)}
                 placeholder="John Doe"
                 required
+                className="bg-blue-900/20 border-blue-500/30 text-white"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email" className="text-white">Email</Label>
               <Input
                 id="email"
                 type="email"
@@ -206,14 +207,15 @@ export default function SignUp() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 required
+                className="bg-blue-900/20 border-blue-500/30 text-white"
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-white/70">
                 Use a valid email address that you have access to
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password" className="text-white">Password</Label>
               <Input
                 id="password"
                 type="password"
@@ -221,14 +223,15 @@ export default function SignUp() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
+                className="bg-blue-900/20 border-blue-500/30 text-white"
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-white/70">
                 Must be at least 6 characters
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Label htmlFor="confirmPassword" className="text-white">Confirm Password</Label>
               <Input
                 id="confirmPassword"
                 type="password"
@@ -236,20 +239,21 @@ export default function SignUp() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="••••••••"
                 required
+                className="bg-blue-900/20 border-blue-500/30 text-white"
               />
             </div>
 
             {error && (
-              <div className="text-black text-sm font-medium">{error}</div>
+              <div className="text-red-300 text-sm font-medium bg-red-900/20 p-2 rounded">{error}</div>
             )}
             
             {successMessage && (
-              <div className="text-black text-sm font-medium">{successMessage}</div>
+              <div className="text-green-300 text-sm font-medium bg-green-900/20 p-2 rounded">{successMessage}</div>
             )}
 
             <Button
               type="submit"
-              className="w-full gap-2"
+              className="w-full gap-2 bg-blue-500 hover:bg-blue-600 text-white"
               disabled={isLoading}
             >
               {isLoading ? "Creating account..." : "Sign Up"} <UserPlus className="w-4 h-4" />
@@ -257,10 +261,10 @@ export default function SignUp() {
           </form>
 
           <div className="text-center text-sm">
-            <span className="text-muted-foreground">Already have an account? </span>
+            <span className="text-white/70">Already have an account? </span>
             <Button
               variant="link"
-              className="text-primary p-0"
+              className="text-blue-300 hover:text-blue-200 p-0"
               onClick={() => router.push("/auth/signin")}
             >
               Sign In
@@ -270,7 +274,7 @@ export default function SignUp() {
           <div className="text-center text-sm">
             <Button
               variant="link"
-              className="text-muted-foreground hover:text-primary"
+              className="text-white/70 hover:text-blue-300"
               onClick={() => router.push("/")}
             >
               Back to Home
