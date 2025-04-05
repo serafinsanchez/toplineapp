@@ -91,9 +91,9 @@ export function AudioWaveform({
         barRadius: 4,
         cursorWidth: 0, // No cursor
         normalize: true,
-        backend: 'WebAudio',
+        backend: 'MediaElement',
         minPxPerSec: 50, // Ensure minimum width of bars
-        hideScrollbar: false,
+        hideScrollbar: true,
         autoCenter: true,
         fillParent: true,
         interact: true,
