@@ -1,8 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { motion } from "framer-motion";
 import { StemExtractionResult } from "@/types";
+import { AudioWaveform } from "@/components/ui/AudioWaveform";
 
 // Utility function to convert base64 to Blob
 function base64ToBlob(base64: string, type: string): Blob {
@@ -33,6 +34,14 @@ interface ExtractedStemsDisplayProps {
 export function ExtractedStemsDisplay({ extractedStems }: ExtractedStemsDisplayProps) {
   if (!extractedStems) return null;
   
+  // Debug logging
+  useEffect(() => {
+    console.log('[ExtractedStemsDisplay] Stems received:', {
+      acapella: extractedStems.acapella,
+      instrumental: extractedStems.instrumental
+    });
+  }, [extractedStems]);
+
   const downloadFile = (data: string, filename: string, type: string) => {
     const blob = base64ToBlob(data, type);
     const url = URL.createObjectURL(blob);
@@ -45,6 +54,30 @@ export function ExtractedStemsDisplay({ extractedStems }: ExtractedStemsDisplayP
     URL.revokeObjectURL(url);
   };
 
+  // Define stem items for consistency and future scalability
+  const stemItems = [
+    {
+      id: "acapella",
+      title: "Acapella",
+      data: extractedStems.acapella,
+      waveColor: "rgba(59, 130, 246, 0.3)", // Lighter blue for unplayed audio
+      progressColor: "rgba(37, 99, 235, 0.9)", // Darker, more solid blue for played audio
+    },
+    {
+      id: "instrumental",
+      title: "Instrumental",
+      data: extractedStems.instrumental,
+      waveColor: "rgba(124, 58, 237, 0.3)", // Lighter purple for unplayed audio
+      progressColor: "rgba(109, 40, 217, 0.9)", // Darker, more solid purple for played audio
+    }
+  ];
+
+  // Log URLs for debugging
+  console.log('[ExtractedStemsDisplay] Audio URLs:', {
+    acapella: extractedStems.acapella?.url,
+    instrumental: extractedStems.instrumental?.url
+  });
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -52,40 +85,43 @@ export function ExtractedStemsDisplay({ extractedStems }: ExtractedStemsDisplayP
       transition={{ delay: 0.2, duration: 0.3 }}
       className="w-full mt-8 p-6 border-2 border-blue-400 rounded-lg bg-blue-50/5"
     >
-      
-      
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Acapella */}
-        <div className="p-4 border border-border rounded-lg">
-          <h4 className="text-lg font-medium mb-2">Acapella</h4>
-          <audio controls className="w-full mb-3">
-            <source src={extractedStems.acapella.url} type={extractedStems.acapella.type} />
-            Your browser does not support the audio element.
-          </audio>
-          <a 
-            href={extractedStems.acapella.url} 
-            download={extractedStems.acapella.name}
-            className="text-sm text-blue-400 hover:text-blue-300 flex items-center gap-1 relative z-10"
+        {stemItems.map(stem => (
+          <div 
+            key={stem.id}
+            className="p-4 border border-border rounded-lg relative"
           >
-            Download Acapella
-          </a>
-        </div>
-        
-        {/* Instrumental */}
-        <div className="p-4 border border-border rounded-lg">
-          <h4 className="text-lg font-medium mb-2">Instrumental</h4>
-          <audio controls className="w-full mb-3">
-            <source src={extractedStems.instrumental.url} type={extractedStems.instrumental.type} />
-            Your browser does not support the audio element.
-          </audio>
-          <a 
-            href={extractedStems.instrumental.url} 
-            download={extractedStems.instrumental.name}
-            className="text-sm text-blue-400 hover:text-blue-300 flex items-center gap-1 relative z-10"
-          >
-            Download Instrumental
-          </a>
-        </div>
+            <h4 className="text-lg font-medium mb-4">{stem.title}</h4>
+            {stem.data && stem.data.url ? (
+              <div className="relative flex flex-col">
+                <div className="mb-8">
+                  <AudioWaveform 
+                    audioUrl={stem.data.url} 
+                    className=""
+                    waveColor={stem.waveColor}
+                    progressColor={stem.progressColor}
+                    height={80}
+                    barWidth={3}
+                    barGap={2}
+                  />
+                </div>
+                <div className="mt-2 pt-2 border-t border-t-gray-800">
+                  <a 
+                    href={stem.data.url} 
+                    download={stem.data.name}
+                    className="text-sm text-blue-400 hover:text-blue-300 inline-flex items-center gap-1 relative z-10 mt-2 hover:underline"
+                  >
+                    Download {stem.title}
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <div className="py-4 text-sm text-red-400">
+                Audio data unavailable for {stem.title}
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </motion.div>
   );

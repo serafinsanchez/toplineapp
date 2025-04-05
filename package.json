@@ -46,7 +46,8 @@
     "tailwind-merge": "^3.0.2",
     "tailwindcss-animate": "^1.0.7",
     "tough-cookie": "^5.1.2",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.0",
+    "wavesurfer.js": "^7.9.4"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
