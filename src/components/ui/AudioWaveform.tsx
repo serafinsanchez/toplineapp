@@ -89,15 +89,16 @@ export function AudioWaveform({
         barWidth,
         barGap,
         barRadius: 4,
-        cursorWidth: 0, // No cursor
+        cursorWidth: 1,
+        cursorColor: progressColor,
         normalize: true,
         backend: 'MediaElement',
-        minPxPerSec: 50, // Ensure minimum width of bars
-        hideScrollbar: true,
-        autoCenter: true,
+        minPxPerSec: 100,
+        hideScrollbar: false,
+        autoCenter: false,
         fillParent: true,
         interact: true,
-        barHeight: 1, // All bars equal height
+        barHeight: 1,
         fetchParams: {
           signal: abortController.signal
         }
@@ -122,6 +123,19 @@ export function AudioWaveform({
           setIsLoaded(true);
           setIsLoading(false);
           setDuration(wsInstance.getDuration());
+          
+          // Force a slight delay before refreshing to ensure proper rendering
+          setTimeout(() => {
+            if (containerRef.current && containerRef.current.clientWidth > 0) {
+              debug('Refreshing waveform after load');
+              try {
+                // Make sure we can see the beginning of the waveform clearly
+                wsInstance.seekTo(0);
+              } catch (e) {
+                console.warn("Could not refresh waveform after load:", e);
+              }
+            }
+          }, 100);
         }
       });
       
@@ -143,7 +157,15 @@ export function AudioWaveform({
         }
       });
       
+      // Update time tracking more frequently for smoother progress
       wsInstance.on("audioprocess", () => {
+        if (isMounted.current) {
+          setCurrentTime(wsInstance.getCurrentTime());
+        }
+      });
+
+      // Also update time on seeking - use as 'any' to bypass type issue
+      wsInstance.on("seek" as any, () => {
         if (isMounted.current) {
           setCurrentTime(wsInstance.getCurrentTime());
         }
@@ -207,6 +229,59 @@ export function AudioWaveform({
     };
   }, [audioUrl, waveColor, progressColor, height, barWidth, barGap]);
 
+  // Handle property changes after initial render
+  useEffect(() => {
+    if (wavesurfer.current && isLoaded) {
+      try {
+        debug('Updating WaveSurfer with new properties', { waveColor, progressColor, height, barWidth, barGap });
+        
+        // Update wavesurfer options
+        wavesurfer.current.setOptions({
+          waveColor,
+          progressColor,
+          height,
+          barWidth,
+          barGap
+        });
+        
+        // Get current time before updating
+        let currentPos = 0;
+        try {
+          currentPos = wavesurfer.current.getCurrentTime() || 0;
+        } catch (err) {
+          debug('Error getting current time', err);
+        }
+        
+        // Seek to beginning to refresh the waveform
+        try {
+          wavesurfer.current.seekTo(0);
+        } catch (err) {
+          debug('Error seeking to 0', err);
+        }
+        
+        // Restore position after a delay if there was a valid position
+        if (currentPos > 0) {
+          setTimeout(() => {
+            if (wavesurfer.current && isMounted.current) {
+              try {
+                const duration = wavesurfer.current.getDuration() || 0;
+                // Only attempt to seek if duration is valid and greater than 0
+                if (duration && isFinite(duration) && duration > 0) {
+                  const seekPosition = Math.min(currentPos / duration, 0.99);
+                  wavesurfer.current.seekTo(seekPosition);
+                }
+              } catch (err) {
+                debug('Error restoring position', err);
+              }
+            }
+          }, 100);
+        }
+      } catch (e) {
+        console.warn("Could not update waveform properties:", e);
+      }
+    }
+  }, [waveColor, progressColor, height, barWidth, barGap, isLoaded]);
+
   // Handle window resize to redraw wavesurfer
   useEffect(() => {
     const handleResize = () => {
@@ -240,6 +315,20 @@ export function AudioWaveform({
     }
   };
 
+  // Add a refresh function that can be called to redraw the waveform
+  const refreshWaveform = () => {
+    if (wavesurfer.current && isLoaded) {
+      try {
+        // Update waveform display using valid methods
+        const currentTime = wavesurfer.current.getCurrentTime();
+        wavesurfer.current.seekTo(0);
+        wavesurfer.current.seekTo(currentTime / wavesurfer.current.getDuration());
+      } catch (e) {
+        console.warn("Could not refresh waveform:", e);
+      }
+    }
+  };
+
   const formatTime = (time: number) => {
     const minutes = Math.floor(time / 60);
     const seconds = Math.floor(time % 60);
@@ -247,7 +336,7 @@ export function AudioWaveform({
   };
 
   // Calculate progress percentage
-  const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const progressPercentage = duration > 0 && isFinite(duration) ? (currentTime / duration) * 100 : 0;
 
   return (
     <div className={`w-full ${className} relative`}>
@@ -280,7 +369,7 @@ export function AudioWaveform({
           />
           {isPlaying && (
             <div 
-              className="absolute top-0 left-0 h-full bg-blue-500/10 animate-pulse pointer-events-none rounded-md" 
+              className="absolute top-0 left-0 h-full bg-blue-500/10 pointer-events-none rounded-md" 
               style={{width: `${progressPercentage}%`}} 
             />
           )}
