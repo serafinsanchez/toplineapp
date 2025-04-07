@@ -3,7 +3,7 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { useDropzone } from "react-dropzone";
 import { motion } from "framer-motion";
-import { Upload, CheckCircle, XCircle, Music, Trash2, Loader2, ArrowRight } from "lucide-react";
+import { Upload, CheckCircle, XCircle, Music, Trash2, Loader2, ArrowRight, Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,7 @@ import { useSession } from "next-auth/react";
 import { CREDIT_REFRESH_EVENT } from "@/components/layout/Header";
 import { uploadLargeFileToSupabase } from "@/lib/upload-helpers";
 import { UploadProgress } from "./UploadProgress";
+import { RecordingArea } from "./RecordingArea";
 
 export function UploadArea() {
   const [fileDetails, setFileDetails] = useState<FileDetails | null>(null);
@@ -33,6 +34,7 @@ export function UploadArea() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { data: session, status } = useSession();
   const isAuthenticated = status === "authenticated";
+  const [isRecordingModeActive, setIsRecordingModeActive] = useState<boolean>(false);
 
   // Add type interface for upload result
   interface UploadResult {
@@ -349,16 +351,16 @@ export function UploadArea() {
     setExtractedStems(null);
     
     // More permissive validation for file types
-    const validTypes = ["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/aiff", "audio/x-aiff"];
+    const validTypes = ["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/aiff", "audio/x-aiff", "audio/webm", "audio/webm;codecs=opus"];
     const fileExtension = file.name.split('.').pop()?.toLowerCase();
-    const isValidExtension = ["mp3", "wav", "aiff"].includes(fileExtension || "");
+    const isValidExtension = ["mp3", "wav", "aiff", "webm"].includes(fileExtension || "");
     
     // Accept either by MIME type or by extension
     const isValid = validTypes.includes(file.type) || isValidExtension;
     console.log("Is valid file:", isValid, "Extension:", fileExtension);
 
     if (!isValid) {
-      setDropError(`File type '${file.type}' not supported. Please upload MP3, WAV, or AIFF files.`);
+      setDropError(`File type '${file.type}' not supported. Please upload MP3, WAV, AIFF, or WEBM files.`);
       return;
     }
     
@@ -784,6 +786,15 @@ export function UploadArea() {
     window.location.href = `${process.env.NEXT_PUBLIC_APP_URL}/auth/signup`;
   };
 
+  // Add this new function to process recordings
+  const handleRecordingComplete = (recordedFile: File) => {
+    // Use the existing processFile function
+    processFile(recordedFile);
+    
+    // Reset recording mode
+    setIsRecordingModeActive(false);
+  };
+
   return (
     <div className="w-full max-w-4xl mx-auto p-6">
       <motion.div
@@ -802,300 +813,323 @@ export function UploadArea() {
           />
         )}
 
-        {/* Separate file input outside of dropzone */}
-        <input 
-          type="file" 
-          id="manual-file-input"
-          ref={fileInputRef}
-          accept=".mp3,.wav,.aiff"
-          onChange={(e) => {
-            console.log("File input change event triggered");
-            handleManualFileSelect(e);
-          }}
-          style={{ display: 'none' }}
-        />
-        
-        {/* Only show file details if stems are not extracted yet */}
-        {fileDetails && !extractedStems ? (
-          // When file is uploaded but stems not extracted, show file details
-          <motion.div 
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.3 }}
-            className={cn(
-              "w-full h-64 border-2 rounded-lg flex flex-col items-center justify-center p-6",
-              isValidFile === true && !freeTrialUsed ? "border-blue-400 bg-blue-50/5" : "",
-              isValidFile === true && freeTrialUsed ? "border-blue-400 bg-blue-50/10" : "",
-              isValidFile === false ? "border-red-500 bg-red-50/10" : "border-border"
-            )}
-          >
-            {isValidFile ? (
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: "spring", stiffness: 200, damping: 10 }}
-              >
-                <CheckCircle className="w-12 h-12 text-blue-400" />
-              </motion.div>
-            ) : (
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: "spring", stiffness: 200, damping: 10 }}
-              >
-                <XCircle className="w-12 h-12 text-red-500" />
-              </motion.div>
-            )}
-            <p className="text-lg font-medium">{fileDetails.name}</p>
-            <p className="text-sm text-muted-foreground">
-              {formatFileSize(fileDetails.size)}
-            </p>
-            {isValidFile && !freeTrialUsed && (
-              <motion.p 
-                initial={{ opacity: 0, y: 5 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="text-sm text-blue-300 mt-2 flex items-center gap-1"
-              >
-                <CheckCircle className="w-4 h-4 text-blue-300" /> Ready for stem separation!
-              </motion.p>
-            )}
-            {isValidFile && freeTrialUsed && (
-              <motion.p 
-                initial={{ opacity: 0, y: 5 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="text-sm text-blue-300 mt-2 flex items-center gap-1"
-              >
-                <CheckCircle className="w-4 h-4 text-blue-300" /> Valid file! Sign up to extract stems.
-              </motion.p>
-            )}
-            {!isValidFile && (
-              <motion.p 
-                initial={{ opacity: 0, y: 5 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="text-sm text-red-500 mt-2"
-              >
-                {dropError || "Invalid file format. Please upload MP3, WAV, or AIFF files only."}
-              </motion.p>
-            )}
+        {/* Conditionally render RecordingArea or regular upload area */}
+        {isRecordingModeActive ? (
+          <RecordingArea 
+            onRecordingComplete={handleRecordingComplete}
+            onCancel={() => setIsRecordingModeActive(false)}
+          />
+        ) : (
+          <>
+            {/* Separate file input outside of dropzone */}
+            <input 
+              type="file" 
+              id="manual-file-input"
+              ref={fileInputRef}
+              accept=".mp3,.wav,.aiff"
+              onChange={(e) => {
+                console.log("File input change event triggered");
+                handleManualFileSelect(e);
+              }}
+              style={{ display: 'none' }}
+            />
             
-            <div className="flex gap-2 mt-4">
-              <ShimmerButton 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  console.log("Shimmer reset button clicked");
-                  resetFile();
-                }}
-                className="font-medium text-sm px-3 py-1"
-                background="rgba(60, 65, 80, 0.6)"
-                shimmerColor="rgba(180, 185, 210, 0.5)"
+            {/* Only show file details if stems are not extracted yet */}
+            {fileDetails && !extractedStems ? (
+              // When file is uploaded but stems not extracted, show file details
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ duration: 0.3 }}
+                className={cn(
+                  "w-full h-64 border-2 rounded-lg flex flex-col items-center justify-center p-6",
+                  isValidFile === true && !freeTrialUsed ? "border-blue-400 bg-blue-50/5" : "",
+                  isValidFile === true && freeTrialUsed ? "border-blue-400 bg-blue-50/10" : "",
+                  isValidFile === false ? "border-red-500 bg-red-50/10" : "border-border"
+                )}
               >
-                <span className="flex items-center gap-1">
-                  <Trash2 className="w-3 h-3" /> Reset
-                </span>
-              </ShimmerButton>
-            </div>
-          </motion.div>
-        ) : !fileDetails && !extractedStems ? (
-          // When no file is uploaded and no stems extracted, show the dropzone
-          <div
-            ref={dropzoneRef}
-            {...getRootProps()}
-            className={cn(
-              "w-full h-64 border-2 border-dashed rounded-lg flex flex-col items-center justify-center p-6 transition-all duration-300 cursor-pointer relative",
-              (isDragActive || isDraggingFile) ? "border-primary bg-primary/10 scale-[1.02] shadow-lg" : "border-border"
-            )}
-          >
-            <input {...getInputProps()} />
-            <Upload className={cn(
-              "w-12 h-12 mb-4 transition-colors duration-300",
-              (isDragActive || isDraggingFile) ? "text-primary" : "text-muted-foreground"
-            )} />
-            <p className="text-lg text-center mb-2">
-              {(isDragActive || isDraggingFile)
-                ? "Drop your audio file here..." 
-                : "Drag and drop your audio file here"}
-            </p>
-            <p className="text-sm text-muted-foreground text-center mb-4">
-              Supported formats: MP3, WAV, AIFF
-            </p>
-            
-            <div className="relative z-30">
-              <ShimmerButton
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  console.log("Select from computer button clicked");
-                  // Use our own file input instead of dropzone's open function
-                  if (fileInputRef.current) {
-                    fileInputRef.current.click();
-                  }
-                }}
-                className="font-medium text-sm px-3 py-1"
-                background="rgba(60, 65, 80, 0.6)"
-                shimmerColor="rgba(180, 185, 210, 0.5)"
-              >
-                <span className="flex items-center gap-1">
-                  <Upload className="w-3 h-3" /> Select from computer
-                </span>
-              </ShimmerButton>
-            </div>
-            
-            {dropError && (
-              <p className="text-sm text-red-500 mt-4">{dropError}</p>
-            )}
-          </div>
-        ) : extractedStems && fileDetails ? (
-          // When stems are extracted, show a simplified file info
-          <motion.div 
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.3 }}
-            className="w-full border-2 rounded-lg border-border bg-background/50 p-4 flex items-center justify-center"
-          >
-            <div className="flex items-center gap-3">
-              <CheckCircle className="w-6 h-6 text-blue-400" />
-              <div>
-                <p className="font-medium">{fileDetails.name}</p>
+                {isValidFile ? (
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ type: "spring", stiffness: 200, damping: 10 }}
+                  >
+                    <CheckCircle className="w-12 h-12 text-blue-400" />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ type: "spring", stiffness: 200, damping: 10 }}
+                  >
+                    <XCircle className="w-12 h-12 text-red-500" />
+                  </motion.div>
+                )}
+                <p className="text-lg font-medium">{fileDetails.name}</p>
                 <p className="text-sm text-muted-foreground">
                   {formatFileSize(fileDetails.size)}
                 </p>
+                {isValidFile && !freeTrialUsed && (
+                  <motion.p 
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                    className="text-sm text-blue-300 mt-2 flex items-center gap-1"
+                  >
+                    <CheckCircle className="w-4 h-4 text-blue-300" /> Ready for stem separation!
+                  </motion.p>
+                )}
+                {isValidFile && freeTrialUsed && (
+                  <motion.p 
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                    className="text-sm text-blue-300 mt-2 flex items-center gap-1"
+                  >
+                    <CheckCircle className="w-4 h-4 text-blue-300" /> Valid file! Sign up to extract stems.
+                  </motion.p>
+                )}
+                {!isValidFile && (
+                  <motion.p 
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                    className="text-sm text-red-500 mt-2"
+                  >
+                    {dropError || "Invalid file format. Please upload MP3, WAV, or AIFF files only."}
+                  </motion.p>
+                )}
+                
+                <div className="flex gap-2 mt-4">
+                  <ShimmerButton 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      console.log("Shimmer reset button clicked");
+                      resetFile();
+                    }}
+                    className="font-medium text-sm px-3 py-1"
+                    background="rgba(60, 65, 80, 0.6)"
+                    shimmerColor="rgba(180, 185, 210, 0.5)"
+                  >
+                    <span className="flex items-center gap-1">
+                      <Trash2 className="w-3 h-3" /> Reset
+                    </span>
+                  </ShimmerButton>
+                </div>
+              </motion.div>
+            ) : !fileDetails && !extractedStems ? (
+              // When no file is uploaded and no stems extracted, show the dropzone
+              <div
+                ref={dropzoneRef}
+                {...getRootProps()}
+                className={cn(
+                  "w-full h-64 border-2 border-dashed rounded-lg flex flex-col items-center justify-center p-6 transition-all duration-300 cursor-pointer relative",
+                  (isDragActive || isDraggingFile) ? "border-primary bg-primary/10 scale-[1.02] shadow-lg" : "border-border"
+                )}
+              >
+                <input {...getInputProps()} />
+                <Upload className={cn(
+                  "w-12 h-12 mb-4 transition-colors duration-300",
+                  (isDragActive || isDraggingFile) ? "text-primary" : "text-muted-foreground"
+                )} />
+                <p className="text-lg text-center mb-2">
+                  {(isDragActive || isDraggingFile)
+                    ? "Drop your audio file here..." 
+                    : "Drag and drop your audio file here"}
+                </p>
+                <p className="text-sm text-muted-foreground text-center mb-4">
+                  Supported formats: MP3, WAV, AIFF
+                </p>
+                
+                <div className="relative z-30 flex gap-2">
+                  <ShimmerButton
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      if (fileInputRef.current) {
+                        fileInputRef.current.click();
+                      }
+                    }}
+                    className="font-medium text-sm px-3 py-1"
+                    background="rgba(60, 65, 80, 0.6)"
+                    shimmerColor="rgba(180, 185, 210, 0.5)"
+                  >
+                    <span className="flex items-center gap-1">
+                      <Upload className="w-3 h-3" /> Select from computer
+                    </span>
+                  </ShimmerButton>
+                  
+                  <ShimmerButton
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setIsRecordingModeActive(true);
+                    }}
+                    className="font-medium text-sm px-3 py-1"
+                    background="rgba(60, 65, 80, 0.6)"
+                    shimmerColor="rgba(180, 185, 210, 0.5)"
+                  >
+                    <span className="flex items-center gap-1">
+                      <Mic className="w-3 h-3" /> Record Audio
+                    </span>
+                  </ShimmerButton>
+                </div>
+                
+                {dropError && (
+                  <p className="text-sm text-red-500 mt-4">{dropError}</p>
+                )}
               </div>
-            </div>
-          </motion.div>
-        ) : null}
+            ) : extractedStems && fileDetails ? (
+              // When stems are extracted, show a simplified file info
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ duration: 0.3 }}
+                className="w-full border-2 rounded-lg border-border bg-background/50 p-4 flex items-center justify-center"
+              >
+                <div className="flex items-center gap-3">
+                  <CheckCircle className="w-6 h-6 text-blue-400" />
+                  <div>
+                    <p className="font-medium">{fileDetails.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {formatFileSize(fileDetails.size)}
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            ) : null}
 
-        {/* Display extracted stems if available */}
-        {extractedStems && <ExtractedStemsDisplay extractedStems={extractedStems} />}
-        
-        {/* Display processing status if processing */}
-        {isProcessing && (
-          <ProcessingStatus 
-            isProcessing={isProcessing} 
-            onComplete={() => {
-              // This is just for visual effect - the actual state change happens in handleGetStems
-              console.log("Visual processing complete");
-            }}
-          />
-        )}
-        
-        {/* Display free trial used message if applicable */}
-        {freeTrialUsed && !processingError && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, duration: 0.3 }}
-            className="w-full mt-4 p-4 border-2 border-blue-400 rounded-lg bg-blue-50/10"
-          >
-            <p className="text-center">
-              <span className="font-medium text-blue-400">Thanks for trying it out!</span>{' '}
-              <span className="text-white/70">
-                Sign up and add credits to add extract more stems.
-              </span>
-            </p>
-          </motion.div>
-        )}
-        
-        {/* Display processing error if any */}
-        {processingError && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, duration: 0.3 }}
-            className="w-full mt-4 p-4 border-2 border-red-500 rounded-lg bg-red-50/10"
-          >
-            {renderErrorWithLink(processingError)}
-          </motion.div>
-        )}
-
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ 
-            opacity: 1,
-            y: 0 
-          }}
-          transition={{ delay: 0.3, duration: 0.3 }}
-          className="mt-6 w-full flex justify-center gap-4 relative"
-          onMouseEnter={() => setIsHovering(true)}
-          onMouseLeave={() => setIsHovering(false)}
-        >
-          {/* Sparkles effect under the button */}
-          {!extractedStems && fileDetails && isValidFile && !isProcessing && (
-            <div className="absolute -bottom-10 w-full h-20 pointer-events-none">
-              <SparklesCore
-                background="transparent"
-                minSize={0.4}
-                maxSize={1.2}
-                particleDensity={70}
-                className="w-full h-full"
-                particleColor="#5D8BF4"
-                speed={0.8}
+            {/* Display extracted stems if available */}
+            {extractedStems && <ExtractedStemsDisplay extractedStems={extractedStems} />}
+            
+            {/* Display processing status if processing */}
+            {isProcessing && (
+              <ProcessingStatus 
+                isProcessing={isProcessing} 
+                onComplete={() => {
+                  // This is just for visual effect - the actual state change happens in handleGetStems
+                  console.log("Visual processing complete");
+                }}
               />
-              
-              {/* Glow effect */}
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-10 bg-blue-500/20 blur-xl rounded-full"></div>
-            </div>
-          )}
-          
-          {!extractedStems ? (
-            // Only show "Get Stems" button if there's a valid file and not currently processing
-            fileDetails && isValidFile && !isProcessing ? (
-              freeTrialUsed ? (
-                <ShimmerButton 
-                  onClick={handleSignUp}
-                  className="font-medium relative"
-                  background="rgba(25, 55, 125, 0.4)"
-                  shimmerColor="rgba(138, 180, 248, 0.8)"
-                >
-                  <span className="flex items-center gap-2">
-                    Sign Up Now <ArrowRight className="w-4 h-4" />
+            )}
+            
+            {/* Display free trial used message if applicable */}
+            {freeTrialUsed && !processingError && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2, duration: 0.3 }}
+                className="w-full mt-4 p-4 border-2 border-blue-400 rounded-lg bg-blue-50/10"
+              >
+                <p className="text-center">
+                  <span className="font-medium text-blue-400">Thanks for trying it out!</span>{' '}
+                  <span className="text-white/70">
+                    Sign up and add credits to add extract more stems.
                   </span>
-                  
-                  {/* Additional glow effect on hover */}
-                  <div className={cn(
-                    "absolute inset-0 -z-10 rounded-md transition-opacity duration-300",
-                    isHovering ? "opacity-100" : "opacity-0"
-                  )}>
-                    <div className="absolute inset-0 bg-blue-500/20 blur-md rounded-md"></div>
-                  </div>
-                </ShimmerButton>
-              ) : (
-                <ShimmerButton 
-                  onClick={handleGetStems}
-                  className="font-medium relative"
-                  background="rgba(25, 55, 125, 0.4)"
-                  shimmerColor="rgba(138, 180, 248, 0.8)"
-                >
-                  <span className="flex items-center gap-2">
-                    Get Stems <Music className="w-4 h-4" />
-                  </span>
-                  
-                  {/* Additional glow effect on hover */}
-                  <div className={cn(
-                    "absolute inset-0 -z-10 rounded-md transition-opacity duration-300",
-                    isHovering ? "opacity-100" : "opacity-0"
-                  )}>
-                    <div className="absolute inset-0 bg-blue-500/20 blur-md rounded-md"></div>
-                  </div>
-                </ShimmerButton>
-              )
-            ) : null
-          ) : (
-            // Show "Start Over" button if stems have been extracted
-            <ShimmerButton 
-              onClick={resetFile}
-              className="font-medium"
-              background="rgba(60, 65, 80, 0.6)"
-              shimmerColor="rgba(180, 185, 210, 0.5)"
+                </p>
+              </motion.div>
+            )}
+            
+            {/* Display processing error if any */}
+            {processingError && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2, duration: 0.3 }}
+                className="w-full mt-4 p-4 border-2 border-red-500 rounded-lg bg-red-50/10"
+              >
+                {renderErrorWithLink(processingError)}
+              </motion.div>
+            )}
+
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ 
+                opacity: 1,
+                y: 0 
+              }}
+              transition={{ delay: 0.3, duration: 0.3 }}
+              className="mt-6 w-full flex justify-center gap-4 relative"
+              onMouseEnter={() => setIsHovering(true)}
+              onMouseLeave={() => setIsHovering(false)}
             >
-              <span className="flex items-center gap-2">
-                Upload New Song <Upload className="w-4 h-4" />
-              </span>
-            </ShimmerButton>
-          )}
-        </motion.div>
+              {/* Sparkles effect under the button */}
+              {!extractedStems && fileDetails && isValidFile && !isProcessing && (
+                <div className="absolute -bottom-10 w-full h-20 pointer-events-none">
+                  <SparklesCore
+                    background="transparent"
+                    minSize={0.4}
+                    maxSize={1.2}
+                    particleDensity={70}
+                    className="w-full h-full"
+                    particleColor="#5D8BF4"
+                    speed={0.8}
+                  />
+                  
+                  {/* Glow effect */}
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-10 bg-blue-500/20 blur-xl rounded-full"></div>
+                </div>
+              )}
+              
+              {!extractedStems ? (
+                // Only show "Get Stems" button if there's a valid file and not currently processing
+                fileDetails && isValidFile && !isProcessing ? (
+                  freeTrialUsed ? (
+                    <ShimmerButton 
+                      onClick={handleSignUp}
+                      className="font-medium relative"
+                      background="rgba(25, 55, 125, 0.4)"
+                      shimmerColor="rgba(138, 180, 248, 0.8)"
+                    >
+                      <span className="flex items-center gap-2">
+                        Sign Up Now <ArrowRight className="w-4 h-4" />
+                      </span>
+                      
+                      {/* Additional glow effect on hover */}
+                      <div className={cn(
+                        "absolute inset-0 -z-10 rounded-md transition-opacity duration-300",
+                        isHovering ? "opacity-100" : "opacity-0"
+                      )}>
+                        <div className="absolute inset-0 bg-blue-500/20 blur-md rounded-md"></div>
+                      </div>
+                    </ShimmerButton>
+                  ) : (
+                    <ShimmerButton 
+                      onClick={handleGetStems}
+                      className="font-medium relative"
+                      background="rgba(25, 55, 125, 0.4)"
+                      shimmerColor="rgba(138, 180, 248, 0.8)"
+                    >
+                      <span className="flex items-center gap-2">
+                        Get Stems <Music className="w-4 h-4" />
+                      </span>
+                      
+                      {/* Additional glow effect on hover */}
+                      <div className={cn(
+                        "absolute inset-0 -z-10 rounded-md transition-opacity duration-300",
+                        isHovering ? "opacity-100" : "opacity-0"
+                      )}>
+                        <div className="absolute inset-0 bg-blue-500/20 blur-md rounded-md"></div>
+                      </div>
+                    </ShimmerButton>
+                  )
+                ) : null
+              ) : (
+                // Show "Start Over" button if stems have been extracted
+                <ShimmerButton 
+                  onClick={resetFile}
+                  className="font-medium"
+                  background="rgba(60, 65, 80, 0.6)"
+                  shimmerColor="rgba(180, 185, 210, 0.5)"
+                >
+                  <span className="flex items-center gap-2">
+                    Upload New Song <Upload className="w-4 h-4" />
+                  </span>
+                </ShimmerButton>
+              )}
+            </motion.div>
+          </>
+        )}
       </motion.div>
     </div>
   );

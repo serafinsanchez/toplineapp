@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { saveUploadedFile } from '@/lib/audio-processor';
 
 // Supported file formats
-const SUPPORTED_FORMATS = ['.mp3', '.wav', '.aiff'];
+const SUPPORTED_FORMATS = ['.mp3', '.wav', '.aiff', '.webm'];
 // Maximum file size (50MB)
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
 
     if (!isValidFormat) {
       return NextResponse.json(
-        { error: 'That file type isn\'t in our toolbox! We only work with MP3, WAV, or AIFF files.' },
+        { error: 'That file type isn\'t in our toolbox! We only work with MP3, WAV, AIFF, or WEBM files.' },
         { status: 400 }
       );
     }

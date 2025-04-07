@@ -34,15 +34,15 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Validate file type
-    const validTypes = ["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/aiff", "audio/x-aiff"];
+    // Validate file type (more permissive validation)
+    const validTypes = ["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/aiff", "audio/x-aiff", "audio/webm", "audio/webm;codecs=opus"];
     const fileExtension = file.name.split('.').pop()?.toLowerCase();
-    const isValidExtension = ["mp3", "wav", "aiff"].includes(fileExtension || "");
+    const isValidExtension = ["mp3", "wav", "aiff", "webm"].includes(fileExtension || "");
     
     if (!validTypes.includes(file.type) && !isValidExtension) {
       console.warn(`Invalid file type: ${file.type}, extension: ${fileExtension}`);
       return NextResponse.json(
-        { success: false, error: `File type '${file.type}' not supported` },
+        { success: false, error: `File type '${file.type}' not supported. Please upload MP3, WAV, AIFF, or WEBM files.` },
         { status: 400 }
       );
     }
