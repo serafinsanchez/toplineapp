@@ -79,8 +79,11 @@ export function RecordingArea({ onRecordingComplete, onCancel }: RecordingAreaPr
             <Button
               variant="ghost"
               size="sm"
-              onClick={onCancel}
-              className="text-sm text-muted-foreground"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCancel();
+              }}
+              className="text-sm text-muted-foreground relative z-50 hover:bg-white/10"
             >
               Back to upload
             </Button>
