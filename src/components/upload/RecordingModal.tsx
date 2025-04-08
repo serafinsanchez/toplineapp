@@ -473,8 +473,8 @@ export function RecordingModal({ onComplete, onCancel, onError }: RecordingModal
               cleanupRecording();
               onCancel();
             }}
-            variant="outline"
-            className="text-sm border border-white/10 hover:bg-white/5"
+            variant="secondary"
+            className="text-sm bg-gray-800 text-white hover:bg-gray-700"
             disabled={isRecording}
           >
             Cancel
