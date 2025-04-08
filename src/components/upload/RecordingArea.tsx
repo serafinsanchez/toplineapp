@@ -75,15 +75,17 @@ export function RecordingArea({ onRecordingComplete, onCancel }: RecordingAreaPr
             <p className="text-sm text-red-500 mt-4">{dropError}</p>
           )}
           
-          <div className="mt-4">
+          <div className="mt-4 relative z-50">
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
               onClick={(e) => {
+                e.preventDefault();
                 e.stopPropagation();
+                console.log("Back to upload clicked");
                 onCancel();
               }}
-              className="text-sm text-muted-foreground relative z-50 hover:bg-white/10"
+              className="text-sm bg-gray-800 text-white hover:bg-gray-700 border border-gray-600 transition-colors cursor-pointer"
             >
               Back to upload
             </Button>
