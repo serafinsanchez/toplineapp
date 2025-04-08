@@ -12,6 +12,7 @@ interface AudioWaveformProps {
   height?: number;
   barWidth?: number;
   barGap?: number;
+  autoScroll?: boolean;
 }
 
 export function AudioWaveform({
@@ -22,6 +23,7 @@ export function AudioWaveform({
   height = 80,
   barWidth = 3,
   barGap = 2,
+  autoScroll = false,
 }: AudioWaveformProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const wavesurfer = useRef<WaveSurfer | null>(null);
@@ -95,7 +97,7 @@ export function AudioWaveform({
         backend: 'MediaElement',
         minPxPerSec: 100,
         hideScrollbar: false,
-        autoCenter: false,
+        autoCenter: autoScroll,
         fillParent: true,
         interact: true,
         barHeight: 1,
@@ -227,13 +229,13 @@ export function AudioWaveform({
       // Clear refs
       controllerRef.current = null;
     };
-  }, [audioUrl, waveColor, progressColor, height, barWidth, barGap]);
+  }, [audioUrl, waveColor, progressColor, height, barWidth, barGap, autoScroll]);
 
   // Handle property changes after initial render
   useEffect(() => {
     if (wavesurfer.current && isLoaded) {
       try {
-        debug('Updating WaveSurfer with new properties', { waveColor, progressColor, height, barWidth, barGap });
+        debug('Updating WaveSurfer with new properties', { waveColor, progressColor, height, barWidth, barGap, autoScroll });
         
         // Update wavesurfer options
         wavesurfer.current.setOptions({
@@ -241,7 +243,8 @@ export function AudioWaveform({
           progressColor,
           height,
           barWidth,
-          barGap
+          barGap,
+          autoCenter: autoScroll
         });
         
         // Get current time before updating
@@ -280,7 +283,7 @@ export function AudioWaveform({
         console.warn("Could not update waveform properties:", e);
       }
     }
-  }, [waveColor, progressColor, height, barWidth, barGap, isLoaded]);
+  }, [waveColor, progressColor, height, barWidth, barGap, autoScroll, isLoaded]);
 
   // Handle window resize to redraw wavesurfer
   useEffect(() => {
