@@ -351,16 +351,16 @@ export function UploadArea() {
     setExtractedStems(null);
     
     // More permissive validation for file types
-    const validTypes = ["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/aiff", "audio/x-aiff", "audio/webm", "audio/webm;codecs=opus"];
+    const validTypes = ["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/aiff", "audio/x-aiff", "audio/webm", "audio/webm;codecs=opus", "audio/flac", "audio/x-flac"];
     const fileExtension = file.name.split('.').pop()?.toLowerCase();
-    const isValidExtension = ["mp3", "wav", "aiff", "webm"].includes(fileExtension || "");
+    const isValidExtension = ["mp3", "wav", "aiff", "webm", "flac"].includes(fileExtension || "");
     
     // Accept either by MIME type or by extension
     const isValid = validTypes.includes(file.type) || isValidExtension;
     console.log("Is valid file:", isValid, "Extension:", fileExtension);
 
     if (!isValid) {
-      setDropError(`File type '${file.type}' not supported. Please upload MP3, WAV, AIFF, or WEBM files.`);
+      setDropError(`File type '${file.type}' not supported. Please upload MP3, WAV, AIFF, WEBM, or FLAC files.`);
       return;
     }
     
@@ -938,7 +938,9 @@ export function UploadArea() {
                     : "Drag and drop your audio file here"}
                 </p>
                 <p className="text-sm text-muted-foreground text-center mb-4">
-                  Supported formats: MP3, WAV, AIFF
+                  Supported formats: MP3, WAV, AIFF, WEBM, FLAC
+                  <br />
+                  Maximum file size: 50MB
                 </p>
                 
                 <div className="relative z-30 flex gap-2">
