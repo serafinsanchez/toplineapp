@@ -22,6 +22,7 @@
 
 # production
 /build
+/archive
 
 # misc
 .DS_Store
@@ -34,8 +35,9 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
+# Ignore all environment variable files except the example
 .env*
-!.env.local.example
+.env.local.example
 
 # vercel
 .vercel
