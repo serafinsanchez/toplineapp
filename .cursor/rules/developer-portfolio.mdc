@@ -1,0 +1,31 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+Fully audit this codebase and README, confirm all tech stack and functionality. Do not write a summary yet. Just output key facts with 100% certainty.
+
+Now, based on those facts, write the full polished developer portfolio summary as below:
+
+Project Overview (short paragraph summarizing the app's purpose and audience)
+
+Key Features (clear bullet points, including both user and admin features)
+
+User Flow (step-by-step of a typical user journey)
+
+Architecture and Backend Design (important design decisions, tech stack used, database models if any)
+
+Security Measures (authentication, authorization, data protection)
+
+UI/UX Details (frameworks, animations, special touches)
+Technical Challenges Overcome (significant problems you solved — processing, scaling, auth, etc.)
+
+Tech Stack Breakdown (frontend, backend, third-party services, devops, testing)
+
+Impact and Problem Solved (why this project matters; how it helps users)
+
+My Role in the Project (so I can edit in my exact contribution: e.g., Full-Stack Dev, Backend Lead, etc.)
+
+Be confident and factual. No hedging ("likely", "potentially") unless truly unavoidable.
+Structure it cleanly and make it easy for a non-technical hiring manager to understand.
+Highlight anything unique, novel, or technically impressive."
